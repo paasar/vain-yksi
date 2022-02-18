@@ -18,9 +18,9 @@ async fn main() {
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
 
     println!("Configuring websocket route");
-    // ws/new/<username>
     let ws_route = warp::path("ws");
 
+    // ws/new/<username>
     let new_route = ws_route
         .and(warp::path("new"))
         .and(warp::path::param::<String>())
