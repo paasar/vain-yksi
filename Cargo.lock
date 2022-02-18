@@ -1013,6 +1013,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "vain-yksi"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+ "warp",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1055,19 +1068,6 @@ dependencies = [
  "tokio-util",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "warp-websocket-server-tutorial"
-version = "0.1.0"
-dependencies = [
- "futures",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "uuid",
- "warp",
 ]
 
 [[package]]

@@ -1,5 +1,6 @@
 [package]
-name = "warp-websocket-server-tutorial"
+name = "vain-yksi"
+description = "Word guessing game done with WebSockets to learn Rust and WebSockets"
 version = "0.1.0"
 authors = ["Ari Paasonen <paasar@gmail.com>"]
 edition = "2018"
