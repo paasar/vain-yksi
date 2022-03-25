@@ -7,15 +7,30 @@ mod ws;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub client_id: String,
-    pub session: String,
+    pub username: String,
     pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
 }
-type Clients = Arc<Mutex<HashMap<String, Client>>>;
+
+#[derive(Debug, Clone)]
+pub struct GameState {
+    word_to_guess: Option<String>
+}
+
+#[derive(Debug, Clone)]
+pub struct Game {
+    pub game_id: String,
+    pub game_state: GameState,
+    pub clients: HashMap<String, Client>
+}
+
+// type Clients = Arc<Mutex<HashMap<String, Client>>>;
+type Games = Arc<Mutex<HashMap<String, Game>>>;
 type Result<T> = std::result::Result<T, Rejection>;
 
 #[tokio::main]
 async fn main() {
-    let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
+    // let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
+    let games: Games = Arc::new(Mutex::new(HashMap::new()));
 
     println!("Configuring websocket route");
     let ws_route = warp::path("ws");
@@ -26,7 +41,7 @@ async fn main() {
         .and(warp::path::param::<String>())
         .and(warp::path::end())
         .and(warp::ws())
-        .and(with_clients(clients.clone()))
+        .and(with_games(games.clone()))
         .and_then(handlers::new_game_handler);
 
     //ws/join/<session_id>/<username>
@@ -36,7 +51,7 @@ async fn main() {
         .and(warp::path::param::<String>())
         .and(warp::path::end())
         .and(warp::ws())
-        .and(with_clients(clients.clone()))
+        .and(with_games(games.clone()))
         .and_then(handlers::join_game_handler);
 
     let routes =
@@ -47,6 +62,6 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
 
-fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
-    warp::any().map(move || clients.clone())
+fn with_games(games: Games) -> impl Filter<Extract = (Games,), Error = Infallible> + Clone {
+    warp::any().map(move || games.clone())
 }
