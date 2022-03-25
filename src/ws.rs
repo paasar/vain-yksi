@@ -35,7 +35,13 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
         clients,
     };
 
-    games.lock().await.insert(game_id.clone(), new_game);
+
+    if let Ok(mut editable_games) = games.try_lock() {
+        editable_games.insert(game_id.clone(), new_game);
+    } else {
+        println!("Failed to get lock on games.");
+    }
+
     println!("Game created {}", game_id);
     // TODO Send game id to user
 
@@ -43,22 +49,24 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {
-                println!("error receiving message for id {}): {}", client_id.clone(), e);
+                println!("error receiving message for id {}): {}", &client_id, e);
                 break;
             }
         };
         client_msg(&game_id, &client_id, msg, &games).await;
     }
 
-    let mut locked_games = games.lock().await;
-    match locked_games.get_mut(&game_id) {
-        Some(game) => {
-            let clients = &mut game.clients;
-            clients.remove(&client_id);
-            println!("{} disconnected", client_id);
-            // TODO Remove game when last client disconnects
+    println!("Removing creator client '{}' from game", &client_id);
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.get_mut(&game_id) {
+            Some(game) => {
+                let clients = &mut game.clients;
+                clients.remove(&client_id);
+                println!("{} disconnected", client_id);
+                // TODO Remove game when last client disconnects?
+            }
+            None => return // TODO Oh, no! Game not found! Return error?
         }
-        None => return // TODO Oh, no! Game not found! Return error?
     }
 }
 
@@ -80,40 +88,45 @@ pub async fn join_game(game_id: String, username: String, ws: WebSocket, games: 
         sender: Some(client_sender),
     };
 
-    // TODO find game
     println!("FIND GAME");
-    let mut locked_games = games.lock().await;
-    match locked_games.get_mut(&game_id) {
-        Some(game) => {
-            println!("ADD CLIENT");
-            let clients = &mut game.clients;
-            clients.insert(client_id.clone(), new_client);
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.get_mut(&game_id) {
+            Some(game) => {
+                println!("ADD CLIENT");
+                let clients = &mut game.clients;
+                clients.insert(client_id.clone(), new_client);
+            }
+            None => {
+                println!("DIDN'T FIND GAME");
+                return // TODO Oh, no! Game not found! Return error?
+            }
         }
-        None => {
-            println!("DIDN'T FIND GAME");
-            return // TODO Oh, no! Game not found! Return error?
-        }
+    } else {
+        println!("Failed to get lock on games.");
     }
 
     while let Some(result) = client_ws_rcv.next().await {
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {
-                println!("error receiving message for id {}): {}", client_id.clone(), e);
+                println!("error receiving message for id {}): {}", &client_id, e);
                 break;
             }
         };
         client_msg(&game_id, &client_id, msg, &games).await;
     }
 
-    match locked_games.get_mut(&game_id) {
-        Some(game) => {
-            let clients = &mut game.clients;
-            clients.remove(&client_id);
-            println!("{} disconnected", client_id);
-            // TODO Remove game when last client disconnects
+    println!("Removing joiner client '{}' from game", client_id.clone());
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.get_mut(&game_id) {
+            Some(game) => {
+                let clients = &mut game.clients;
+                clients.remove(&client_id);
+                println!("{} disconnected", client_id);
+                // TODO Remove game when last client disconnects?
+            }
+            None => return // TODO Oh, no! Game not found! Return error?
         }
-        None => return // TODO Oh, no! Game not found! Return error?
     }
 }
 
@@ -124,36 +137,10 @@ async fn client_msg(game_id: &str, client_id: &str, msg: Message, games: &Games)
         Err(_) => return,
     };
 
-    // println!("Ping pong?");
-    // TODO this will wait forever
-    let locked = games.lock().await;
-    // match locked.get(game_id) {
-    //     Some(game) => {
-    //         println!("Game found. Finding clients.");
-    //         match game.clients.get(client_id) {
-    //             Some(client) => {
-    //                 if let Some(sender) = &client.sender {
-    //                     if message == "ping" || message == "ping\n" {
-    //                         println!("sending pong");
-    //                         let _ = sender.send(Ok(Message::text("pong")));
-    //                     }
-    //                 }
-    //             }
-    //             None => {
-    //                 println!("No clients found!");
-    //                 return
-    //             }
-    //         }
-    //     }
-    //     None => {
-    //         println!("No matching game found!");
-    //         return
-    //     }
-    // }
-
+    let editable_games = games.lock().await;
     println!("Finding all connected to the game");
     let _ =
-        match locked.get(game_id) {
+        match editable_games.get(game_id) {
             Some(game) => {
                 println!("Game found.");
                 for (current_client_id, client) in &game.clients {
@@ -170,12 +157,6 @@ async fn client_msg(game_id: &str, client_id: &str, msg: Message, games: &Games)
                         println!("Same client. Not sending message.")
                     }
                 }
-                // game.clients
-                //     .filter(|client| && client.client_id != client_id)
-                //     .for_each(|client| if let Some(mut sender) = &client.sender {
-                //         println!("{} sending '{}' to {}", client_id, message, &client.client_id);
-                //         let _ = sender.send(Ok(Message::text(format!("{} from {}", message, &client.client_id))));
-                //     });
             }
             None => {
                 println!("Game not found!");
