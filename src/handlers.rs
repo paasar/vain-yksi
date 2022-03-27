@@ -12,5 +12,5 @@ pub async fn join_game_handler(session: String, username :String, ws: warp::ws::
 
     // TODO validate session
 
-    Ok(ws.on_upgrade(move |socket| ws::join_game(session.clone(), username.clone(), socket, games)))
+    Ok(ws.on_upgrade(move |socket| ws::join_game(username.clone(), socket, games, session.clone())))
 }
