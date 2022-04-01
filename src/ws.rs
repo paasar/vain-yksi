@@ -14,22 +14,24 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     println!("Creating game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
 
+    let new_game_id = create_new_game_id(&games);
+
     let (client_id, new_client) = create_client(username, client_sender);
 
-    let (game_id, new_game) = create_game(client_id.clone(), new_client);
+    let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client);
 
     if let Ok(mut editable_games) = games.try_lock() {
-        editable_games.insert(game_id.clone(), new_game);
+        editable_games.live_games.insert(new_game_id.clone(), new_game);
     } else {
         println!("Failed to get lock on games.");
     }
 
-    println!("Game created {}", game_id);
+    println!("Game created {}", &new_game_id);
     // TODO Send game id to user
 
-    handle_messages(&mut client_ws_rcv, &client_id, &games, &game_id).await;
+    handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id).await;
 
-    remove_client(&games, &game_id, &client_id);
+    remove_client(&games, &new_game_id, &client_id);
 }
 
 pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: String) {
@@ -59,6 +61,17 @@ fn establish_websocket_connection(ws: WebSocket) -> (SplitStream<WebSocket>, Unb
     return (client_ws_rcv, client_sender);
 }
 
+fn create_new_game_id(games: &Games) -> String {
+    return if let Ok(mut editable_games) = games.try_lock() {
+        editable_games.games_created += 1;
+        let game_id = (1000 + editable_games.games_created).to_string();
+        game_id
+    } else {
+        // TODO Errors and error handling
+        Uuid::new_v4().to_simple().to_string()
+    }
+}
+
 fn create_client(username: String, client_sender: UnboundedSender<Result<Message, warp::Error>>) -> (String, Client) {
     let client_id = Uuid::new_v4().to_simple().to_string();
     let new_client = Client {
@@ -70,24 +83,23 @@ fn create_client(username: String, client_sender: UnboundedSender<Result<Message
     return (client_id, new_client);
 }
 
-fn create_game(client_id: String, client: Client) -> (String, Game) {
+fn create_game_with_id(game_id: &str, client_id: String, client: Client) -> Game {
     let mut clients: HashMap<String, Client> = HashMap::new();
     clients.insert(client_id, client);
 
-    let game_id = Uuid::new_v4().to_simple().to_string();
     let game_state = GameState { word_to_guess: None };
     let new_game = Game {
-        game_id: game_id.clone(),
+        game_id: game_id.to_string(),
         game_state,
         clients,
     };
 
-    return (game_id, new_game);
+    return new_game;
 }
 
 fn add_client_to_game(client_id: String, client: Client, games: &Games, game_id: &str) {
     if let Ok(mut editable_games) = games.try_lock() {
-        match editable_games.get_mut(game_id) {
+        match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
                 println!("ADD CLIENT");
                 let clients = &mut game.clients;
@@ -126,7 +138,7 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
     let editable_games = games.lock().await;
     println!("Finding all connected to the game");
     let _ =
-        match editable_games.get(game_id) {
+        match editable_games.live_games.get(game_id) {
             Some(game) => {
                 println!("Game found.");
                 for (current_client_id, client) in &game.clients {
@@ -155,7 +167,7 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {
     println!("Removing client '{}' from game", client_id);
     if let Ok(mut editable_games) = games.try_lock() {
-        match editable_games.get_mut(game_id) {
+        match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
                 let clients = &mut game.clients;
                 clients.remove(client_id);

@@ -23,12 +23,19 @@ pub struct Game {
     pub clients: HashMap<String, Client>
 }
 
-type Games = Arc<Mutex<HashMap<String, Game>>>;
+#[derive(Debug, Clone)]
+pub struct GameContainer {
+    pub games_created: u32,
+    pub live_games: HashMap<String, Game>
+}
+
+type Games = Arc<Mutex<GameContainer>>;
 type Result<T> = std::result::Result<T, Rejection>;
 
 #[tokio::main]
 async fn main() {
-    let games: Games = Arc::new(Mutex::new(HashMap::new()));
+    let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
+    let games: Games = Arc::new(Mutex::new(game_container));
 
     println!("Configuring websocket route");
     let ws_route = warp::path("ws");
