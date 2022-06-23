@@ -147,7 +147,7 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
                         match &client.sender {
                             Some(sender) => {
                                 println!("{} sending '{}' to {}", client_id, message, &client.client_id);
-                                let _ = sender.send(Ok(Message::text(format!("{} from {}", message, &client.client_id))));
+                                let _ = sender.send(Ok(Message::text(format!("{}", message))));
                             }
                             None => return
                         }
