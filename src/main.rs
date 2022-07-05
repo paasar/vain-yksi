@@ -41,11 +41,11 @@ async fn main() {
     let games: Games = Arc::new(Mutex::new(game_container));
 
     println!("Configuring websocket routes");
-
     let routes =
         new_route(&games)
         .or(join_route(&games))
         .with(warp::cors().allow_any_origin());
+
     println!("Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
@@ -85,8 +85,16 @@ fn join_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Reject
 
 #[cfg(test)]
 mod tests {
+    use warp::test::WsClient;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+
+    async fn expect_received(client: &mut WsClient, expected_message: &str) {
+        let msg = client.recv().await.expect("recv");
+        assert_eq!(msg.to_str(), Ok(expected_message));
+
+        return;
+    }
 
     #[tokio::test]
     async fn created_game_contains_client_with_given_name() {
@@ -132,11 +140,9 @@ mod tests {
             .expect("handshake");
 
         host_client.send_text("hi from host").await;
-        let msg = player_client.recv().await.expect("recv");
-        assert_eq!(msg.to_str(), Ok("hi from host"));
+        expect_received(&mut player_client, "hi from host").await;
 
         player_client.send_text("hi from player").await;
-        let msg = host_client.recv().await.expect("recv");
-        assert_eq!(msg.to_str(), Ok("hi from player"));
+        expect_received(&mut host_client, "hi from player").await;
     }
 }
