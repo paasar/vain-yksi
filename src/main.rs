@@ -5,6 +5,7 @@ use warp::{Filter, Rejection, Reply, ws::Message};
 
 mod handlers;
 mod ws;
+mod words;
 
 #[derive(Debug, Clone)]
 pub struct Client {

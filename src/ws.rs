@@ -10,6 +10,8 @@ use warp::ws::{Message, WebSocket};
 
 use crate::{Client, Game, Games, GameState};
 
+use crate::words;
+
 pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     println!("Creating game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
@@ -19,6 +21,10 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     let (client_id, new_client) = create_client(username, client_sender);
 
     let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client);
+
+    // TODO Put word in game state when game is started.
+    let word = words::get_random_word();
+    println!("Word! {}", word);
 
     if let Ok(mut editable_games) = games.try_lock() {
         editable_games.live_games.insert(new_game_id.clone(), new_game);
