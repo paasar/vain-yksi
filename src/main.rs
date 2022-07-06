@@ -5,6 +5,7 @@ use warp::{Filter, Rejection, Reply, ws::Message};
 
 mod handlers;
 mod ws;
+mod words;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -40,11 +41,11 @@ async fn main() {
     let games: Games = Arc::new(Mutex::new(game_container));
 
     println!("Configuring websocket routes");
-
     let routes =
         new_route(&games)
         .or(join_route(&games))
         .with(warp::cors().allow_any_origin());
+
     println!("Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
@@ -84,58 +85,100 @@ fn join_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Reject
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use serde_json::json;
+    use tokio::time::timeout;
+    use warp::test::WsClient;
+
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    #[tokio::test]
-    async fn created_game_contains_client_with_given_name() {
+    async fn assert_message(client: &mut WsClient, expected_message: &str) {
+        let msg = client.recv().await.expect("recv");
+        assert_eq!(msg.to_str(), Ok(expected_message));
+
+        return;
+    }
+
+    async fn expect_received(client: &mut WsClient, expected_message: &str) {
+        if let Err(_) = timeout(Duration::from_secs(2),
+                                assert_message(client, expected_message)).await {
+            assert!(false, "Did not finish in time!");
+        }
+
+        return;
+    }
+
+    async fn empty_games_state() -> Games {
         let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
-        let games: Games = Arc::new(Mutex::new(game_container));
+        return Arc::new(Mutex::new(game_container));
+    }
 
-        let ws_filter = new_route(&games);
+    async fn start_game(games: &Games, username: &str) -> WsClient {
+        let route = new_route(games);
 
-        warp::test::ws()
-            .path("/ws/new/user1")
-            .handshake(ws_filter)
-            .await
-            .expect("handshake");
+        return warp::test::ws()
+                .path(&*format!("/ws/new/{}", username))
+                .handshake(route)
+                .await
+                .expect("handshake");
+    }
 
-        // TODO Can we do reading without lock?
+    async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
+        let route = join_route(games);
+
+        return warp::test::ws()
+                .path(&*format!("/ws/join/{}/{}", game_id, username))
+                .handshake(route)
+                .await
+                .expect("handshake");
+    }
+
+    // TODO Case #1 when game is created send game id
+
+    // Case #2
+    #[tokio::test]
+    async fn join_event_is_delivered_to_existing_players() {
+        let games= empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        // TODO Add player id to playload? -> Can't compare as a plain string then.
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {"name": "user2"}
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {"name": "user3"}
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
         let current_games = games.lock().await;
         let game = current_games.live_games.get("1001").unwrap();
         let clients = game.clone().clients;
-        for client in clients.values() {
-            assert_eq!(client.username, "user1");
-        }
+        assert_eq!(3, clients.len());
     }
 
-    #[tokio::test]
-    async fn create_game_then_join_game_and_send_message() {
-        let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
-        let games: Games = Arc::new(Mutex::new(game_container));
+    // TODO Case #3 game start chooses word and notifies of roles
+    // TODO Case #4 hint is stored in state
+    // TODO Case #5 after last hint, duplicates notification is shown and guesser sees unique hints
+    // TODO Case #6 guesser's guess is shown
+    // TODO Case #7 select next guesser and word... -> #2
 
-        let host_ws_filter = new_route(&games);
+    // Nice to have
+    // TODO Case #2.1 trying to join non-existent game gives clear error
+    // TODO Case #2.2 player quit event
+    // TODO Case #3.1 can't start game with only one player
+    // TODO Case #6.1 score is updated in state and notified to players
 
-        let mut host_client = warp::test::ws()
-            .path("/ws/new/user1")
-            .handshake(host_ws_filter)
-            .await
-            .expect("handshake");
-
-
-        let client_ws_filter = join_route(&games);
-        let mut player_client = warp::test::ws()
-            .path("/ws/join/1001/user2")
-            .handshake(client_ws_filter)
-            .await
-            .expect("handshake");
-
-        host_client.send_text("hi from host").await;
-        let msg = player_client.recv().await.expect("recv");
-        assert_eq!(msg.to_str(), Ok("hi from host"));
-
-        player_client.send_text("hi from player").await;
-        let msg = host_client.recv().await.expect("recv");
-        assert_eq!(msg.to_str(), Ok("hi from player"));
-    }
+    // Under consideration
+    // TODO Case #100.1 re-join with existing username
+    // TODO Case #100.2 heartbeat to drop a player who has lost connection
 }
