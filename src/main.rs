@@ -96,18 +96,36 @@ mod tests {
         return;
     }
 
+    async fn empty_games_state() -> Games {
+        let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
+        return Arc::new(Mutex::new(game_container));
+    }
+
+    async fn start_game(games: &Games, username: &str) -> WsClient {
+        let route = new_route(games);
+
+        return warp::test::ws()
+                .path(&*format!("/ws/new/{}", username))
+                .handshake(route)
+                .await
+                .expect("handshake");
+    }
+
+    async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
+        let route = join_route(games);
+
+        return warp::test::ws()
+                .path(&*format!("/ws/join/{}/{}", game_id, username))
+                .handshake(route)
+                .await
+                .expect("handshake");
+    }
+
     #[tokio::test]
     async fn created_game_contains_client_with_given_name() {
-        let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
-        let games: Games = Arc::new(Mutex::new(game_container));
+        let games= empty_games_state().await;
 
-        let ws_filter = new_route(&games);
-
-        warp::test::ws()
-            .path("/ws/new/user1")
-            .handshake(ws_filter)
-            .await
-            .expect("handshake");
+        start_game(&games, "user1").await;
 
         // TODO Can we do reading without lock?
         let current_games = games.lock().await;
@@ -120,24 +138,11 @@ mod tests {
 
     #[tokio::test]
     async fn create_game_then_join_game_and_send_message() {
-        let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
-        let games: Games = Arc::new(Mutex::new(game_container));
+        let games= empty_games_state().await;
 
-        let host_ws_filter = new_route(&games);
+        let mut host_client = start_game(&games, "user1").await;
 
-        let mut host_client = warp::test::ws()
-            .path("/ws/new/user1")
-            .handshake(host_ws_filter)
-            .await
-            .expect("handshake");
-
-
-        let client_ws_filter = join_route(&games);
-        let mut player_client = warp::test::ws()
-            .path("/ws/join/1001/user2")
-            .handshake(client_ws_filter)
-            .await
-            .expect("handshake");
+        let mut player_client= join_game(&games, "1001", "user2").await;
 
         host_client.send_text("hi from host").await;
         expect_received(&mut player_client, "hi from host").await;
