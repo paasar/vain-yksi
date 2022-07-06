@@ -85,13 +85,27 @@ fn join_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Reject
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use serde_json::json;
+    use tokio::time::timeout;
     use warp::test::WsClient;
+
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    async fn expect_received(client: &mut WsClient, expected_message: &str) {
+    async fn assert_message(client: &mut WsClient, expected_message: &str) {
         let msg = client.recv().await.expect("recv");
         assert_eq!(msg.to_str(), Ok(expected_message));
+
+        return;
+    }
+
+    async fn expect_received(client: &mut WsClient, expected_message: &str) {
+        if let Err(_) = timeout(Duration::from_secs(2),
+                                assert_message(client, expected_message)).await {
+            assert!(false, "Did not finish in time!");
+        }
 
         return;
     }
@@ -121,47 +135,50 @@ mod tests {
                 .expect("handshake");
     }
 
+    // TODO Case #1 when game is created send game id
+
+    // Case #2
     #[tokio::test]
-    async fn created_game_contains_client_with_given_name() {
-        let games= empty_games_state().await;
-
-        start_game(&games, "user1").await;
-
-        // TODO Can we do reading without lock?
-        let current_games = games.lock().await;
-        let game = current_games.live_games.get("1001").unwrap();
-        let clients = game.clone().clients;
-        for client in clients.values() {
-            assert_eq!(client.username, "user1");
-        }
-    }
-
-    #[tokio::test]
-    async fn create_game_then_join_game_and_send_message() {
+    async fn join_event_is_delivered_to_existing_players() {
         let games= empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
 
-        let mut player_client= join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        // TODO Add player id to playload? -> Can't compare as a plain string then.
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {"name": "user2"}
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
 
-        host_client.send_text("hi from host").await;
-        expect_received(&mut player_client, "hi from host").await;
+        join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {"name": "user3"}
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
 
-        player_client.send_text("hi from player").await;
-        expect_received(&mut host_client, "hi from player").await;
+        let current_games = games.lock().await;
+        let game = current_games.live_games.get("1001").unwrap();
+        let clients = game.clone().clients;
+        assert_eq!(3, clients.len());
     }
 
-    // TODO #1 join event is delivered
-    // TODO #2 game start chooses word and notifies of roles
-    // TODO #3 hint is stored in state
-    // TODO #4 after last hint, duplicates notification is shown and guesser sees unique hints
-    // TODO #5 guesser's guess is shown
-    // TODO #6 select next guesser and word... -> #2
+    // TODO Case #3 game start chooses word and notifies of roles
+    // TODO Case #4 hint is stored in state
+    // TODO Case #5 after last hint, duplicates notification is shown and guesser sees unique hints
+    // TODO Case #6 guesser's guess is shown
+    // TODO Case #7 select next guesser and word... -> #2
 
-    // TODO #1.1 trying to join non-existent game gives clear error
-    // TODO #2.1 can't start game with only one player
-    // TODO #5.1 score is updated in state and notified to players
+    // Nice to have
+    // TODO Case #2.1 trying to join non-existent game gives clear error
+    // TODO Case #2.2 player quit event
+    // TODO Case #3.1 can't start game with only one player
+    // TODO Case #6.1 score is updated in state and notified to players
 
-    // TODO #100.1 re-join with existing username
-    // TODO #100.2 heartbeat to drop a player who has lost connection
+    // Under consideration
+    // TODO Case #100.1 re-join with existing username
+    // TODO Case #100.2 heartbeat to drop a player who has lost connection
 }

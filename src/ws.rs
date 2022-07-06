@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use futures::{FutureExt, StreamExt};
 use futures::stream::SplitStream;
+use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -47,7 +48,7 @@ pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: S
     let (client_id, new_client) = create_client(username, client_sender);
 
     println!("FIND GAME");
-    add_client_to_game(client_id.clone(), new_client, &games, &game_id);
+    add_client_to_game(client_id.clone(), new_client, &games, &game_id).await;
 
     handle_messages(&mut client_ws_rcv, &client_id, &games, &game_id).await;
 
@@ -103,11 +104,21 @@ fn create_game_with_id(game_id: &str, client_id: String, client: Client) -> Game
     return new_game;
 }
 
-fn add_client_to_game(client_id: String, client: Client, games: &Games, game_id: &str) {
+async fn add_client_to_game(client_id: String, client: Client, games: &Games, game_id: &str) {
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
                 println!("ADD CLIENT");
+
+                // TODO Typed events?
+                let join_message = json!({
+                    "event": "join",
+                    "payload": {"name": client.username}
+                });
+                for (_, client_to_notify) in &game.clients {
+                    send_message(client_to_notify, &*join_message.to_string()).await;
+                }
+
                 let clients = &mut game.clients;
                 clients.insert(client_id.clone(), client);
             }
@@ -118,6 +129,16 @@ fn add_client_to_game(client_id: String, client: Client, games: &Games, game_id:
         }
     } else {
         println!("Failed to get lock on games.");
+    }
+}
+
+async fn send_message(client: &Client, message: &str) {
+    match &client.sender {
+        Some(sender) => {
+            println!("sending '{}' to {} ({})", message, client.username, client.client_id);
+            let _ = sender.send(Ok(Message::text(format!("{}", message))));
+        }
+        None => return
     }
 }
 
