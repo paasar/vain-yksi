@@ -174,7 +174,9 @@ mod tests {
 
     // Nice to have
     // TODO Case #2.1 trying to join non-existent game gives clear error
-    // TODO Case #2.2 player quit event
+    // TODO Case #2.2 player quit event (before start)
+    // TODO Case #2.3 player quit event (as guesser)
+    // TODO Case #2.4 player quit event (as hint giver)
     // TODO Case #3.1 can't start game with only one player
     // TODO Case #6.1 score is updated in state and notified to players
 
