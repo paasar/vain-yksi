@@ -94,6 +94,13 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
+    fn new_game_msg() -> String {
+        return json!({
+            "event": "new_game",
+            "payload": {"id": "1001"}
+        }).to_string();
+    }
+
     async fn assert_message(client: &mut WsClient, expected_message: &str) {
         let msg = client.recv().await.expect("recv");
         assert_eq!(msg.to_str(), Ok(expected_message));
@@ -135,7 +142,15 @@ mod tests {
             .expect("handshake");
     }
 
-    // TODO Case #1 when game is created send game id
+    // Case #1
+    #[tokio::test]
+    async fn new_game_creator_is_sent_the_game_id() {
+        let games = empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+
+        expect_received(&mut host_client, &*new_game_msg()).await;
+    }
 
     // Case #2
     #[tokio::test]
@@ -143,6 +158,7 @@ mod tests {
         let games = empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         // TODO Add player id to playload? -> Can't compare as a plain string then.

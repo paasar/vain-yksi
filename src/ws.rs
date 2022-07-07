@@ -21,7 +21,7 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
 
     let (client_id, new_client) = create_client(username, client_sender);
 
-    let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client);
+    let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client.clone());
 
     // TODO Put word in game state when game is started.
     let word = words::get_random_word();
@@ -34,7 +34,11 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     }
 
     println!("Game created {}", &new_game_id);
-    // TODO Send game id to user
+    let new_game_message = json!({
+                    "event": "new_game",
+                    "payload": {"id": new_game_id}
+                });
+    send_message(&new_client, &*new_game_message.to_string()).await;
 
     handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id).await;
 
