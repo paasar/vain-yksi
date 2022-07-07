@@ -161,17 +161,22 @@ mod tests {
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
-        // TODO Add player id to playload? -> Can't compare as a plain string then.
         let user2_joined_msg = json!({
             "event": "join",
-            "payload": {"name": "user2"}
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
 
         join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
             "event": "join",
-            "payload": {"name": "user3"}
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;

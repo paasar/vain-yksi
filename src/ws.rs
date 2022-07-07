@@ -84,7 +84,9 @@ fn create_new_game_id(games: &Games) -> String {
 }
 
 fn create_client(username: String, client_sender: UnboundedSender<Result<Message, warp::Error>>) -> (String, Client) {
-    let client_id = Uuid::new_v4().to_simple().to_string();
+    // TODO Until I learn to mock ID generator for unit tests, use simple predictable user IDs.
+    // let client_id = Uuid::new_v4().to_simple().to_string();
+    let client_id = format!("{}_id", username);
     let new_client = Client {
         client_id: client_id.clone(),
         username,
@@ -117,7 +119,10 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
                 // TODO Typed events?
                 let join_message = json!({
                     "event": "join",
-                    "payload": {"name": client.username}
+                    "payload": {
+                        "id": client.client_id,
+                        "name": client.username
+                    }
                 });
                 for (_, client_to_notify) in &game.clients {
                     send_message(client_to_notify, &*join_message.to_string()).await;
