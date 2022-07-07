@@ -76,7 +76,7 @@ fn create_new_game_id(games: &Games) -> String {
     } else {
         // TODO Errors and error handling
         Uuid::new_v4().to_simple().to_string()
-    }
+    };
 }
 
 fn create_client(username: String, client_sender: UnboundedSender<Result<Message, warp::Error>>) -> (String, Client) {
@@ -124,7 +124,7 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
             }
             None => {
                 println!("DIDN'T FIND GAME");
-                return // TODO Oh, no! Game not found! Return error?
+                return; // TODO Oh, no! Game not found! Return error?
             }
         }
     } else {
@@ -185,7 +185,7 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
             }
             None => {
                 println!("Game not found!");
-                return
+                return;
             }
         };
     return;

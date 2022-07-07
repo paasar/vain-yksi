@@ -16,20 +16,20 @@ pub struct Client {
 
 #[derive(Debug, Clone)]
 pub struct GameState {
-    word_to_guess: Option<String>
+    word_to_guess: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Game {
     pub game_id: String,
     pub game_state: GameState,
-    pub clients: HashMap<String, Client>
+    pub clients: HashMap<String, Client>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GameContainer {
     pub games_created: u32,
-    pub live_games: HashMap<String, Game>
+    pub live_games: HashMap<String, Game>,
 }
 
 type Games = Arc<Mutex<GameContainer>>;
@@ -43,18 +43,18 @@ async fn main() {
     println!("Configuring websocket routes");
     let routes =
         new_route(&games)
-        .or(join_route(&games))
-        .with(warp::cors().allow_any_origin());
+            .or(join_route(&games))
+            .with(warp::cors().allow_any_origin());
 
     println!("Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
 
-fn with_games(games: Games) -> impl Filter<Extract = (Games,), Error = Infallible> + Clone {
+fn with_games(games: Games) -> impl Filter<Extract=(Games, ), Error=Infallible> + Clone {
     warp::any().map(move || games.clone())
 }
 
-fn new_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/new/<username>
     let new_route = ws_route
@@ -65,10 +65,10 @@ fn new_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejecti
         .and(with_games(games.clone()))
         .and_then(handlers::new_game_handler);
 
-   new_route
+    new_route
 }
 
-fn join_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/join/<session_id>/<username>
     let join_route = ws_route
@@ -119,20 +119,20 @@ mod tests {
         let route = new_route(games);
 
         return warp::test::ws()
-                .path(&*format!("/ws/new/{}", username))
-                .handshake(route)
-                .await
-                .expect("handshake");
+            .path(&*format!("/ws/new/{}", username))
+            .handshake(route)
+            .await
+            .expect("handshake");
     }
 
     async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
         let route = join_route(games);
 
         return warp::test::ws()
-                .path(&*format!("/ws/join/{}/{}", game_id, username))
-                .handshake(route)
-                .await
-                .expect("handshake");
+            .path(&*format!("/ws/join/{}/{}", game_id, username))
+            .handshake(route)
+            .await
+            .expect("handshake");
     }
 
     // TODO Case #1 when game is created send game id
@@ -140,7 +140,7 @@ mod tests {
     // Case #2
     #[tokio::test]
     async fn join_event_is_delivered_to_existing_players() {
-        let games= empty_games_state().await;
+        let games = empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
 
