@@ -15,8 +15,25 @@ use crate::{Client, Game, Games, GameState};
 use crate::words;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ActionMessage {
-    action: String,
+pub struct ActionMessage {
+    pub action: Action,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Action {
+    StartNextRoundAction(StartNextRound),
+    HintAction(Hint),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StartNextRound {
+    pub start_next_round: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Hint {
+    pub hint: String,
 }
 
 pub async fn new_game(username: String, ws: WebSocket, games: Games) {
@@ -91,6 +108,7 @@ fn create_client(username: String, client_sender: UnboundedSender<Result<Message
     let client_id = format!("{}_id", username);
     let new_client = Client {
         client_id: client_id.clone(),
+        hint: None,
         username,
         sender: Some(client_sender),
     };
@@ -143,17 +161,21 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
         }
     } else {
         println!("Failed to get lock on games.");
-    }
+    };
+
+    return
 }
 
 async fn send_message(client: &Client, message: &str) {
     match &client.sender {
         Some(sender) => {
             println!("sending '{}' to {} ({})", message, client.username, client.client_id);
-            let _ = sender.send(Ok(Message::text(format!("{}", message))));
+            let _ = sender.send(Ok(Message::text(String::from(message))));
         }
         None => return
-    }
+    };
+
+    return
 }
 
 async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: &str, games: &Games, game_id: &str) {
@@ -166,12 +188,71 @@ async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: 
             }
         };
         handle_message(&game_id, &client_id, msg, &games).await;
-    }
+    };
+
+    return
+}
+
+async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games) {
+    println!("received message from {}: {:?}", client_id, msg);
+    let message = match msg.to_str() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    // parse if possible
+    match from_str::<ActionMessage>(message) {
+        Ok(action_message) => {
+            println!("Parsed ActionMessage: {:?}", action_message);
+
+            match action_message.action {
+                Action::StartNextRoundAction(_) => start_next_round(game_id, games).await,
+                Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await
+            }
+        }
+        Err(e) => {
+            println!("Couldn't parse '{:?}' as ActionMessage.", e);
+            println!("Games {:?}", games);
+            if let Ok(current_games) = games.try_lock() {
+                println!("Finding all connected to the game");
+                let _ =
+                    match current_games.live_games.get(game_id) {
+                        Some(game) => {
+                            println!("Game found.");
+                            for (current_client_id, client) in &game.clients {
+                                println!("Iterating client {}, for client {} message.", current_client_id, client.client_id);
+                                if current_client_id != client_id {
+                                    match &client.sender {
+                                        Some(sender) => {
+                                            println!("{} sending '{}' to {}", client_id, message, &client.client_id);
+                                            let _ = sender.send(Ok(Message::text(format!("{}", message))));
+                                        }
+                                        None => return
+                                    }
+                                } else {
+                                    println!("Same client. Not sending message.")
+                                }
+                            }
+                        }
+                        None => {
+                            println!("Game not found!");
+                            return;
+                        }
+                    };
+            } else {
+                println!("Failed to get lock on games.");
+            };
+        }
+    };
+
+    println!("RETURNING FROM HANDLE MESSAGE");
+
+    return;
 }
 
 async fn start_next_round(game_id: &str, games: &Games) {
-    let word = if let Ok(readable_games) = games.try_lock() {
-        let word = match &readable_games.test_word {
+    let word = if let Ok(current_games) = games.try_lock() {
+        let word = match &current_games.test_word {
             Some(w) => w.clone(),
             None => words::get_random_word(),
         };
@@ -179,7 +260,7 @@ async fn start_next_round(game_id: &str, games: &Games) {
         println!("Word! {}", word.clone());
         word
     } else {
-        String::from("Could not get a word")
+        String::from("Could not get a word.")
     };
 
     if let Ok(mut editable_games) = games.try_lock() {
@@ -206,63 +287,39 @@ async fn start_next_round(game_id: &str, games: &Games) {
                     send_message(&hinter, &*you_are_hinter_message.to_string()).await;
                 }
 
-                game_state.client_turns.push(guesser);
+                game_state.client_turns.push(guesser.clone());
+
+                //TODO clear old hints
+                println!("NEXT ROUND DATA UPDATE DONE");
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
-    }
-}
-
-async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games) {
-    println!("received message from {}: {:?}", client_id, msg);
-    let message = match msg.to_str() {
-        Ok(v) => v,
-        Err(_) => return,
+    } else {
+        println!("Could not get lock for game state.");
     };
 
-    // parse if possible
-    match from_str::<ActionMessage>(message) {
-        Ok(action_message) => {
-            println!("Parsed action: {:?}", action_message);
+    return
+}
 
-            match &*action_message.action {
-                "start_next_round" => start_next_round(game_id, games).await,
-                unknown_action => println!("Unknown action: {}", unknown_action)
+async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
+    println!("{} {}", client_id, hint);
+
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.live_games.get_mut(game_id) {
+            Some(game) => {
+                let clients = &mut game.clients;
+                match clients.get_mut(client_id) {
+                    Some(client) => client.hint = Some(String::from(hint)),
+                    None => println!("Cloud not find client with id '{}' for storing hint.", client_id)
+                }
             }
+            None => return // TODO Oh, no! Game not found! Return error?
         }
-        Err(e) => {
-            println!("Couldn't parse '{:?}' as Action", e);
+    } else {
+        println!("Could not get lock for game state.");
+    };
 
-            let editable_games = games.lock().await;
-            println!("Finding all connected to the game");
-            let _ =
-                match editable_games.live_games.get(game_id) {
-                    Some(game) => {
-                        println!("Game found.");
-                        for (current_client_id, client) in &game.clients {
-                            println!("Iterating client {}, for client {} message.", current_client_id, client.client_id);
-                            if current_client_id != client_id {
-                                match &client.sender {
-                                    Some(sender) => {
-                                        println!("{} sending '{}' to {}", client_id, message, &client.client_id);
-                                        let _ = sender.send(Ok(Message::text(format!("{}", message))));
-                                    }
-                                    None => return
-                                }
-                            } else {
-                                println!("Same client. Not sending message.")
-                            }
-                        }
-                    }
-                    None => {
-                        println!("Game not found!");
-                        return;
-                    }
-                };
-        }
-    }
-
-    return;
+    return
 }
 
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {
@@ -280,5 +337,5 @@ fn remove_client(games: &Games, game_id: &str, client_id: &str) {
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
-    }
+    };
 }

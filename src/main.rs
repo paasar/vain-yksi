@@ -10,6 +10,7 @@ mod words;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub client_id: String,
+    pub hint: Option<String>,
     pub username: String,
     pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
 }
@@ -122,7 +123,7 @@ mod tests {
         return;
     }
 
-    async fn empty_games_state() -> Games {
+    async fn create_empty_games_state() -> Games {
         let game_container = GameContainer {
             games_created: 0,
             live_games: HashMap::new(),
@@ -154,7 +155,7 @@ mod tests {
     // Case #1
     #[tokio::test]
     async fn new_game_creator_is_sent_the_game_id() {
-        let games = empty_games_state().await;
+        let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
 
@@ -164,7 +165,7 @@ mod tests {
     // Case #2
     #[tokio::test]
     async fn join_event_is_delivered_to_existing_players() {
-        let games = empty_games_state().await;
+        let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
@@ -190,16 +191,19 @@ mod tests {
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
 
-        let current_games = games.lock().await;
-        let game = current_games.live_games.get("1001").unwrap();
-        let clients = game.clone().clients;
-        assert_eq!(3, clients.len());
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            assert_eq!(3, clients.len());
+        } else {
+            assert!(false, "Could not get lock to assert game state.");
+        };
     }
 
     // Case #3
     #[tokio::test]
     async fn staring_game_chooses_word_and_notifies_roles() {
-        let games = empty_games_state().await;
+        let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
@@ -228,7 +232,7 @@ mod tests {
         // ---- Setup done ----
 
         let start_next_round_msg = json!({
-            "action": "start_next_round"
+            "action": {"start_next_round": true}
         });
         host_client.send(Message::text(start_next_round_msg.to_string())).await;
         let new_round_guesser_msg = json!({
@@ -245,21 +249,128 @@ mod tests {
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
 
-        let current_games = games.lock().await;
-        let game = current_games.live_games.get("1001").unwrap();
-        match game.clone().game_state.word_to_guess {
-            Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
-            None => assert!(false, "No word to guess in state.")
-        }
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            match game.clone().game_state.word_to_guess {
+                // TODO Assert that all hints are None
+                Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
+                None => assert!(false, "No word to guess in state.")
+            }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.");
+        };
     }
+
     // TODO Case #4 hint is stored in state
     // TODO Case #5 after last hint, duplicates notification is shown and guesser sees unique hints
+    // Case #4 & #5
+    #[tokio::test]
+    async fn sent_hints_are_stored_and_after_last_hint_duplicates_removed() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let user4_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user4_id",
+                "name": "user4"
+            }
+        });
+        expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*new_round_hinter_msg.to_string()).await;
+
+        // ---- Setup done ----
+        println!("TEST: SETUP DONE");
+
+        let hint2_msg = json!({
+            "action": {"hint": "vinkki2x"}
+        });
+        // TODO This doesn't work when running tests.
+        // The message just isn't passed to ws::handle_message. Lock problem?
+        // - With cargo run it works as expected, when manually running these steps.
+        //   - ws://127.0.0.1:8000/ws/new/aaa
+        //   - ws://127.0.0.1:8000/ws/join/1001/bbb
+        //   - ws://127.0.0.1:8000/ws/join/1001/ccc
+        //   - aaa -> { "action": { "start_next_round": true }}
+        //   - bbb -> { "action": { "hint": "laa2" }}
+        //   - ccc -> { "action": { "hint": "keu3" }}
+        // - Sending hints before start_next_round works as expected.
+        second_client.send(Message::text(hint2_msg.to_string())).await;
+
+        println!("TEST: AFTER SEND HINT");
+        if let Ok(current_games) = games.try_lock() {
+            println!("TEST: GOT LOCK FOR GAMES FOR ASSERTION");
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            println!("CLIENTS {:?}", clients);
+            assert_eq!(Some(String::from("vinkki2")), clients.get("user2_id").unwrap().hint);
+        } else {
+            println!("Cloud not get lock to assert game state.");
+        };
+
+        println!("TEST: AFTER ASSERT STATE");
+        // TODO Add more hints, after last hint, duplicates notification is shown and guesser sees unique hints
+        // let hint3_msg = json!({
+        //     "action": {"hint": "vinkki3"}
+        // });
+        // third_client.send(Message::text(hint3_msg.to_string())).await;
+        //
+        // let hint4_msg = json!({
+        //     "action": {"hint": "vinkki4"}
+        // });
+        // fourth_client.send(Message::text(hint4_msg.to_string())).await;
+    }
+
     // TODO Case #6 guesser's guess is shown
 
     // Case #7
     #[tokio::test]
     async fn requesting_new_round_gives_word_and_notifies_roles() {
-        let games = empty_games_state().await;
+        let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
@@ -286,7 +397,7 @@ mod tests {
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
 
         let start_next_round_msg = json!({
-            "action": "start_next_round"
+            "action": {"start_next_round": true}
         });
         host_client.send(Message::text(start_next_round_msg.to_string())).await;
         let new_round_guesser_msg = json!({
@@ -303,14 +414,16 @@ mod tests {
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
 
-        {
-            let current_games = games.lock().await;
+        if let Ok(current_games) = games.try_lock() {
             let game = current_games.live_games.get("1001").unwrap();
             match game.clone().game_state.word_to_guess {
+                //TODO Assert that all hints are None
                 Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
                 None => assert!(false, "No word to guess in state.")
             }
-        }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.")
+        };
 
         // ---- Setup done ----
 
@@ -330,8 +443,9 @@ mod tests {
     // TODO Case #6.1 score is updated in state and notified to players
 
     // Under consideration
+    // TODO Case #100 "user NN is typing"
     // TODO Case #101 re-join with existing username
     // TODO Case #102 heartbeat to drop a player who has lost connection
-    // TODO Case #103 action: skip word
+    // TODO Case #103 action: skip word -> #7 minus role rolling
     // TODO Case #104 test multiple concurrent games
 }
