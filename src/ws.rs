@@ -163,7 +163,7 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
         println!("Failed to get lock on games.");
     };
 
-    return
+    return;
 }
 
 async fn send_message(client: &Client, message: &str) {
@@ -175,7 +175,7 @@ async fn send_message(client: &Client, message: &str) {
         None => return
     };
 
-    return
+    return;
 }
 
 async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: &str, games: &Games, game_id: &str) {
@@ -190,7 +190,7 @@ async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: 
         handle_message(&game_id, &client_id, msg, &games).await;
     };
 
-    return
+    return;
 }
 
 async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games) {
@@ -245,8 +245,6 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
         }
     };
 
-    println!("RETURNING FROM HANDLE MESSAGE");
-
     return;
 }
 
@@ -290,7 +288,6 @@ async fn start_next_round(game_id: &str, games: &Games) {
                 game_state.client_turns.push(guesser.clone());
 
                 //TODO clear old hints
-                println!("NEXT ROUND DATA UPDATE DONE");
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
@@ -298,7 +295,7 @@ async fn start_next_round(game_id: &str, games: &Games) {
         println!("Could not get lock for game state.");
     };
 
-    return
+    return;
 }
 
 async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
@@ -311,6 +308,16 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
                 match clients.get_mut(client_id) {
                     Some(client) => client.hint = Some(String::from(hint)),
                     None => println!("Cloud not find client with id '{}' for storing hint.", client_id)
+                };
+
+                let hint_received_message = json!({
+                        "event": "hint_received",
+                        "payload": {"client": client_id}
+                    });
+                for (_, client) in clients {
+                    if client.client_id != client_id {
+                        send_message(client, &*hint_received_message.to_string()).await;
+                    }
                 }
             }
             None => return // TODO Oh, no! Game not found! Return error?
@@ -319,7 +326,7 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
         println!("Could not get lock for game state.");
     };
 
-    return
+    return;
 }
 
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {

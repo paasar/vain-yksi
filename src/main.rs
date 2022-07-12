@@ -324,35 +324,28 @@ mod tests {
         expect_received(&mut fourth_client, &*new_round_hinter_msg.to_string()).await;
 
         // ---- Setup done ----
-        println!("TEST: SETUP DONE");
 
         let hint2_msg = json!({
-            "action": {"hint": "vinkki2x"}
+            "action": {"hint": "vinkki2"}
         });
-        // TODO This doesn't work when running tests.
-        // The message just isn't passed to ws::handle_message. Lock problem?
-        // - With cargo run it works as expected, when manually running these steps.
-        //   - ws://127.0.0.1:8000/ws/new/aaa
-        //   - ws://127.0.0.1:8000/ws/join/1001/bbb
-        //   - ws://127.0.0.1:8000/ws/join/1001/ccc
-        //   - aaa -> { "action": { "start_next_round": true }}
-        //   - bbb -> { "action": { "hint": "laa2" }}
-        //   - ccc -> { "action": { "hint": "keu3" }}
-        // - Sending hints before start_next_round works as expected.
         second_client.send(Message::text(hint2_msg.to_string())).await;
 
-        println!("TEST: AFTER SEND HINT");
+        let hint_received_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user2_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_msg.to_string()).await;
+
         if let Ok(current_games) = games.try_lock() {
-            println!("TEST: GOT LOCK FOR GAMES FOR ASSERTION");
             let game = current_games.live_games.get("1001").unwrap();
             let clients = game.clone().clients;
-            println!("CLIENTS {:?}", clients);
             assert_eq!(Some(String::from("vinkki2")), clients.get("user2_id").unwrap().hint);
         } else {
             println!("Cloud not get lock to assert game state.");
         };
 
-        println!("TEST: AFTER ASSERT STATE");
         // TODO Add more hints, after last hint, duplicates notification is shown and guesser sees unique hints
         // let hint3_msg = json!({
         //     "action": {"hint": "vinkki3"}
