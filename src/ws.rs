@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use futures::{FutureExt, StreamExt};
 use futures::stream::SplitStream;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, json};
 use tokio::sync::mpsc;
@@ -11,7 +12,6 @@ use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
 use crate::{Client, Game, Games, GameState};
-
 use crate::words;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,6 +34,12 @@ pub struct StartNextRound {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Hint {
     pub hint: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct ClientAndHint {
+    client: String,
+    hint: String,
 }
 
 pub async fn new_game(username: String, ws: WebSocket, games: Games) {
@@ -298,6 +304,10 @@ async fn start_next_round(game_id: &str, games: &Games) {
     return;
 }
 
+fn is_all_hints_given(clients: &HashMap<String, Client>) -> bool {
+    return clients.iter().filter(|(_, client)| client.hint != None).count() == clients.len() - 1;
+}
+
 async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
     println!("{} {}", client_id, hint);
 
@@ -319,6 +329,46 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
                         send_message(client, &*hint_received_message.to_string()).await;
                     }
                 }
+
+                if is_all_hints_given(&game.clients) {
+                    println!("All hints given!");
+
+                    let grouped_by_hint = group_by_hint(game.clients.clone());
+
+                    let unique_hinters: Vec<Client> = filter_unique_hinters(&grouped_by_hint);
+                    let unique_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(unique_hinters);
+
+                    let duplicate_hinters: Vec<Client> = filter_duplicate_hinters(&grouped_by_hint);
+                    let duplicate_hinter_ids = duplicate_hinters.iter()
+                        .map(|client| client.client_id.clone())
+                        .sorted()
+                        .collect::<Vec<_>>();
+                    let duplicate_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(duplicate_hinters);
+
+                    if let Some((guesser, hinters)) = game.game_state.client_turns.split_last() {
+                        // To guesser
+                        let hints_to_guesser_message = json!({
+                            "event": "all_hints_to_guesser",
+                            "payload": {"hints": unique_hinter_clients,
+                            "usersWithDuplicates": duplicate_hinter_ids
+                           }
+                        });
+                        send_message(guesser, &*hints_to_guesser_message.to_string()).await;
+
+                        // To hinters
+                        let hints_to_hinters_message = json!({
+                            "event": "all_hints",
+                            "payload": {"duplicates": duplicate_hinter_clients,
+                                        "hints": unique_hinter_clients
+                                       }
+                        });
+                        for hinter in hinters {
+                            send_message(hinter, &*hints_to_hinters_message.to_string()).await
+                        }
+                    } else {
+                        println!("Cloud not find guesser and hinters!")
+                    }
+                }
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
@@ -327,6 +377,58 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
     };
 
     return;
+}
+
+fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Vec<Client>> {
+    return clients
+        .into_iter()
+        .map(|(_, client)| client)
+        .filter(|client| client.hint != None)
+        .into_grouping_map_by(|client| client.hint.clone())
+        .collect::<Vec<_>>();
+}
+
+fn filter_unique_hinters(grouped_by_hint: &HashMap<Option<String>, Vec<Client>>) -> Vec<Client> {
+    return grouped_by_hint.into_iter()
+        .fold(vec!(),
+              |mut acc, (_, clients_with_same_hint)| {
+                  if clients_with_same_hint.len() == 1 {
+                      let client_with_unique_hint = clients_with_same_hint.get(0).unwrap();
+                      acc.push(client_with_unique_hint.clone());
+                      acc
+                  } else {
+                      acc
+                  }
+              },
+        );
+}
+
+fn filter_duplicate_hinters(grouped_by_hint: &HashMap<Option<String>, Vec<Client>>) -> Vec<Client> {
+    let init_acc: Vec<Client> = vec!();
+    return grouped_by_hint.into_iter()
+        .fold(init_acc,
+              |mut acc, (_, clients_with_same_hint)| {
+                  if clients_with_same_hint.len() > 1 {
+                      let mut clients_with_duplicate_hint: Vec<Client> = clients_with_same_hint.clone();
+                      acc.append(&mut clients_with_duplicate_hint);
+                      acc
+                  } else {
+                      acc
+                  }
+              },
+        );
+}
+
+fn as_client_and_hints(clients: Vec<Client>) -> Vec<ClientAndHint> {
+    let mut client_and_hints = clients.iter()
+        .map(|client| ClientAndHint {
+            client: client.client_id.clone(),
+            hint: client.hint.clone().unwrap(),
+        })
+        .collect::<Vec<_>>();
+
+    client_and_hints.sort_by(|client_a, client_b| client_a.client.cmp(&client_b.client));
+    return client_and_hints;
 }
 
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {

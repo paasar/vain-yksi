@@ -43,7 +43,8 @@ async fn main() {
     let game_container = GameContainer {
         games_created: 0,
         live_games: HashMap::new(),
-        test_word: None };
+        test_word: None,
+    };
     let games: Games = Arc::new(Mutex::new(game_container));
 
     println!("Configuring websocket routes");
@@ -127,7 +128,7 @@ mod tests {
         let game_container = GameContainer {
             games_created: 0,
             live_games: HashMap::new(),
-            test_word: Some(String::from("testisana"))
+            test_word: Some(String::from("testisana")),
         };
         return Arc::new(Mutex::new(game_container));
     }
@@ -261,8 +262,6 @@ mod tests {
         };
     }
 
-    // TODO Case #4 hint is stored in state
-    // TODO Case #5 after last hint, duplicates notification is shown and guesser sees unique hints
     // Case #4 & #5
     #[tokio::test]
     async fn sent_hints_are_stored_and_after_last_hint_duplicates_removed() {
@@ -346,16 +345,58 @@ mod tests {
             println!("Cloud not get lock to assert game state.");
         };
 
-        // TODO Add more hints, after last hint, duplicates notification is shown and guesser sees unique hints
-        // let hint3_msg = json!({
-        //     "action": {"hint": "vinkki3"}
-        // });
-        // third_client.send(Message::text(hint3_msg.to_string())).await;
-        //
-        // let hint4_msg = json!({
-        //     "action": {"hint": "vinkki4"}
-        // });
-        // fourth_client.send(Message::text(hint4_msg.to_string())).await;
+        // Case #5 Add more hints, after last hint, hints and duplicates notification is sent and
+        // guesser sees only unique hints
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_from3_msg.to_string()).await;
+
+        // Use same hint as user3 to cause a duplicate hint
+        fourth_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from4_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user4_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_from4_msg.to_string()).await;
+
+        let hints_to_guesser_msg = json!({
+            "event": "all_hints_to_guesser",
+            "payload": {"hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }],
+                        "usersWithDuplicates": ["user3_id", "user4_id"]
+                       }
+        });
+        expect_received(&mut host_client, &*hints_to_guesser_msg.to_string()).await;
+
+        let hints_to_hinters_msg = json!({
+            "event": "all_hints",
+            "payload": {"duplicates": [{"client": "user3_id",
+                                        "hint": "vinkki3"
+                                       },
+                                       {"client": "user4_id",
+                                        "hint": "vinkki3"
+                                       }],
+                        "hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }]
+                       }
+        });
+        expect_received(&mut second_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut third_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
     // TODO Case #6 guesser's guess is shown
