@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use futures::{FutureExt, StreamExt};
 use futures::stream::SplitStream;
-use serde_json::json;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use serde_json::{from_str, json};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -10,8 +12,35 @@ use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
 use crate::{Client, Game, Games, GameState};
-
 use crate::words;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActionMessage {
+    pub action: Action,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Action {
+    StartNextRoundAction(StartNextRound),
+    HintAction(Hint),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StartNextRound {
+    pub start_next_round: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Hint {
+    pub hint: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct ClientAndHint {
+    client: String,
+    hint: String,
+}
 
 pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     println!("Creating game and establishing client connection...");
@@ -21,11 +50,7 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
 
     let (client_id, new_client) = create_client(username, client_sender);
 
-    let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client);
-
-    // TODO Put word in game state when game is started.
-    let word = words::get_random_word();
-    println!("Word! {}", word);
+    let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client.clone());
 
     if let Ok(mut editable_games) = games.try_lock() {
         editable_games.live_games.insert(new_game_id.clone(), new_game);
@@ -34,7 +59,11 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     }
 
     println!("Game created {}", &new_game_id);
-    // TODO Send game id to user
+    let new_game_message = json!({
+                    "event": "new_game",
+                    "payload": {"id": new_game_id}
+                });
+    send_message(&new_client, &*new_game_message.to_string()).await;
 
     handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id).await;
 
@@ -76,13 +105,16 @@ fn create_new_game_id(games: &Games) -> String {
     } else {
         // TODO Errors and error handling
         Uuid::new_v4().to_simple().to_string()
-    }
+    };
 }
 
 fn create_client(username: String, client_sender: UnboundedSender<Result<Message, warp::Error>>) -> (String, Client) {
-    let client_id = Uuid::new_v4().to_simple().to_string();
+    // TODO Until I learn to mock ID generator for unit tests, use simple predictable user IDs.
+    // let client_id = Uuid::new_v4().to_simple().to_string();
+    let client_id = format!("{}_id", username);
     let new_client = Client {
         client_id: client_id.clone(),
+        hint: None,
         username,
         sender: Some(client_sender),
     };
@@ -92,9 +124,9 @@ fn create_client(username: String, client_sender: UnboundedSender<Result<Message
 
 fn create_game_with_id(game_id: &str, client_id: String, client: Client) -> Game {
     let mut clients: HashMap<String, Client> = HashMap::new();
-    clients.insert(client_id, client);
+    clients.insert(client_id, client.clone());
 
-    let game_state = GameState { word_to_guess: None };
+    let game_state = GameState { word_to_guess: None, client_turns: vec!(client) };
     let new_game = Game {
         game_id: game_id.to_string(),
         game_state,
@@ -113,33 +145,43 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
                 // TODO Typed events?
                 let join_message = json!({
                     "event": "join",
-                    "payload": {"name": client.username}
+                    "payload": {
+                        "id": client.client_id,
+                        "name": client.username
+                    }
                 });
                 for (_, client_to_notify) in &game.clients {
                     send_message(client_to_notify, &*join_message.to_string()).await;
                 }
 
                 let clients = &mut game.clients;
-                clients.insert(client_id.clone(), client);
+                clients.insert(client_id.clone(), client.clone());
+
+                let game_state = &mut game.game_state;
+                game_state.client_turns.push(client);
             }
             None => {
                 println!("DIDN'T FIND GAME");
-                return // TODO Oh, no! Game not found! Return error?
+                return; // TODO Oh, no! Game not found! Return error?
             }
         }
     } else {
         println!("Failed to get lock on games.");
-    }
+    };
+
+    return;
 }
 
 async fn send_message(client: &Client, message: &str) {
     match &client.sender {
         Some(sender) => {
             println!("sending '{}' to {} ({})", message, client.username, client.client_id);
-            let _ = sender.send(Ok(Message::text(format!("{}", message))));
+            let _ = sender.send(Ok(Message::text(String::from(message))));
         }
         None => return
-    }
+    };
+
+    return;
 }
 
 async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: &str, games: &Games, game_id: &str) {
@@ -152,7 +194,9 @@ async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: 
             }
         };
         handle_message(&game_id, &client_id, msg, &games).await;
-    }
+    };
+
+    return;
 }
 
 async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games) {
@@ -162,33 +206,229 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
         Err(_) => return,
     };
 
-    let editable_games = games.lock().await;
-    println!("Finding all connected to the game");
-    let _ =
-        match editable_games.live_games.get(game_id) {
-            Some(game) => {
-                println!("Game found.");
-                for (current_client_id, client) in &game.clients {
-                    println!("Iterating client {}, for client {} message.", current_client_id, client.client_id);
-                    if current_client_id != client_id {
-                        match &client.sender {
-                            Some(sender) => {
-                                println!("{} sending '{}' to {}", client_id, message, &client.client_id);
-                                let _ = sender.send(Ok(Message::text(format!("{}", message))));
+    // parse if possible
+    match from_str::<ActionMessage>(message) {
+        Ok(action_message) => {
+            println!("Parsed ActionMessage: {:?}", action_message);
+
+            match action_message.action {
+                Action::StartNextRoundAction(_) => start_next_round(game_id, games).await,
+                Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await
+            }
+        }
+        Err(e) => {
+            println!("Couldn't parse '{:?}' as ActionMessage.", e);
+            println!("Games {:?}", games);
+            if let Ok(current_games) = games.try_lock() {
+                println!("Finding all connected to the game");
+                let _ =
+                    match current_games.live_games.get(game_id) {
+                        Some(game) => {
+                            println!("Game found.");
+                            for (current_client_id, client) in &game.clients {
+                                println!("Iterating client {}, for client {} message.", current_client_id, client.client_id);
+                                if current_client_id != client_id {
+                                    match &client.sender {
+                                        Some(sender) => {
+                                            println!("{} sending '{}' to {}", client_id, message, &client.client_id);
+                                            let _ = sender.send(Ok(Message::text(format!("{}", message))));
+                                        }
+                                        None => return
+                                    }
+                                } else {
+                                    println!("Same client. Not sending message.")
+                                }
                             }
-                            None => return
+                        }
+                        None => {
+                            println!("Game not found!");
+                            return;
+                        }
+                    };
+            } else {
+                println!("Failed to get lock on games.");
+            };
+        }
+    };
+
+    return;
+}
+
+async fn start_next_round(game_id: &str, games: &Games) {
+    let word = if let Ok(current_games) = games.try_lock() {
+        let word = match &current_games.test_word {
+            Some(w) => w.clone(),
+            None => words::get_random_word(),
+        };
+
+        println!("Word! {}", word.clone());
+        word
+    } else {
+        String::from("Could not get a word.")
+    };
+
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.live_games.get_mut(game_id) {
+            Some(game) => {
+                let game_state = &mut game.game_state;
+                game_state.word_to_guess = Some(word.clone());
+
+                let guesser = game_state.client_turns.remove(0);
+                let you_are_guesser_message = json!({
+                    "event": "new_round",
+                    "payload": {"role": "guesser"}
+                });
+                send_message(&guesser, &*you_are_guesser_message.to_string()).await;
+                let hinters = game_state.client_turns.clone();
+                let you_are_hinter_message = json!({
+                    "event": "new_round",
+                    "payload": {
+                        "role": "hinter",
+                        "word": word
+                    }
+                });
+                for hinter in hinters {
+                    send_message(&hinter, &*you_are_hinter_message.to_string()).await;
+                }
+
+                game_state.client_turns.push(guesser.clone());
+
+                //TODO clear old hints
+            }
+            None => return // TODO Oh, no! Game not found! Return error?
+        }
+    } else {
+        println!("Could not get lock for game state.");
+    };
+
+    return;
+}
+
+fn is_all_hints_given(clients: &HashMap<String, Client>) -> bool {
+    return clients.iter().filter(|(_, client)| client.hint != None).count() == clients.len() - 1;
+}
+
+async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
+    println!("{} {}", client_id, hint);
+
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.live_games.get_mut(game_id) {
+            Some(game) => {
+                let clients = &mut game.clients;
+                match clients.get_mut(client_id) {
+                    Some(client) => client.hint = Some(String::from(hint)),
+                    None => println!("Cloud not find client with id '{}' for storing hint.", client_id)
+                };
+
+                let hint_received_message = json!({
+                        "event": "hint_received",
+                        "payload": {"client": client_id}
+                    });
+                for (_, client) in clients {
+                    if client.client_id != client_id {
+                        send_message(client, &*hint_received_message.to_string()).await;
+                    }
+                }
+
+                if is_all_hints_given(&game.clients) {
+                    println!("All hints given!");
+
+                    let grouped_by_hint = group_by_hint(game.clients.clone());
+
+                    let unique_hinters: Vec<Client> = filter_unique_hinters(&grouped_by_hint);
+                    let unique_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(unique_hinters);
+
+                    let duplicate_hinters: Vec<Client> = filter_duplicate_hinters(&grouped_by_hint);
+                    let duplicate_hinter_ids = duplicate_hinters.iter()
+                        .map(|client| client.client_id.clone())
+                        .sorted()
+                        .collect::<Vec<_>>();
+                    let duplicate_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(duplicate_hinters);
+
+                    if let Some((guesser, hinters)) = game.game_state.client_turns.split_last() {
+                        // To guesser
+                        let hints_to_guesser_message = json!({
+                            "event": "all_hints_to_guesser",
+                            "payload": {"hints": unique_hinter_clients,
+                            "usersWithDuplicates": duplicate_hinter_ids
+                           }
+                        });
+                        send_message(guesser, &*hints_to_guesser_message.to_string()).await;
+
+                        // To hinters
+                        let hints_to_hinters_message = json!({
+                            "event": "all_hints",
+                            "payload": {"duplicates": duplicate_hinter_clients,
+                                        "hints": unique_hinter_clients
+                                       }
+                        });
+                        for hinter in hinters {
+                            send_message(hinter, &*hints_to_hinters_message.to_string()).await
                         }
                     } else {
-                        println!("Same client. Not sending message.")
+                        println!("Cloud not find guesser and hinters!")
                     }
                 }
             }
-            None => {
-                println!("Game not found!");
-                return
-            }
-        };
+            None => return // TODO Oh, no! Game not found! Return error?
+        }
+    } else {
+        println!("Could not get lock for game state.");
+    };
+
     return;
+}
+
+fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Vec<Client>> {
+    return clients
+        .into_iter()
+        .map(|(_, client)| client)
+        .filter(|client| client.hint != None)
+        .into_grouping_map_by(|client| client.hint.clone())
+        .collect::<Vec<_>>();
+}
+
+fn filter_unique_hinters(grouped_by_hint: &HashMap<Option<String>, Vec<Client>>) -> Vec<Client> {
+    return grouped_by_hint.into_iter()
+        .fold(vec!(),
+              |mut acc, (_, clients_with_same_hint)| {
+                  if clients_with_same_hint.len() == 1 {
+                      let client_with_unique_hint = clients_with_same_hint.get(0).unwrap();
+                      acc.push(client_with_unique_hint.clone());
+                      acc
+                  } else {
+                      acc
+                  }
+              },
+        );
+}
+
+fn filter_duplicate_hinters(grouped_by_hint: &HashMap<Option<String>, Vec<Client>>) -> Vec<Client> {
+    let init_acc: Vec<Client> = vec!();
+    return grouped_by_hint.into_iter()
+        .fold(init_acc,
+              |mut acc, (_, clients_with_same_hint)| {
+                  if clients_with_same_hint.len() > 1 {
+                      let mut clients_with_duplicate_hint: Vec<Client> = clients_with_same_hint.clone();
+                      acc.append(&mut clients_with_duplicate_hint);
+                      acc
+                  } else {
+                      acc
+                  }
+              },
+        );
+}
+
+fn as_client_and_hints(clients: Vec<Client>) -> Vec<ClientAndHint> {
+    let mut client_and_hints = clients.iter()
+        .map(|client| ClientAndHint {
+            client: client.client_id.clone(),
+            hint: client.hint.clone().unwrap(),
+        })
+        .collect::<Vec<_>>();
+
+    client_and_hints.sort_by(|client_a, client_b| client_a.client.cmp(&client_b.client));
+    return client_and_hints;
 }
 
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {
@@ -198,10 +438,13 @@ fn remove_client(games: &Games, game_id: &str, client_id: &str) {
             Some(game) => {
                 let clients = &mut game.clients;
                 clients.remove(client_id);
+
+                let game_state = &mut game.game_state;
+                game_state.client_turns.retain(|c| c.client_id != client_id);
                 println!("{} disconnected", client_id);
                 // TODO Remove game when last client disconnects?
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
-    }
+    };
 }

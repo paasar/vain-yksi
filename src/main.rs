@@ -10,26 +10,29 @@ mod words;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub client_id: String,
+    pub hint: Option<String>,
     pub username: String,
     pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GameState {
-    word_to_guess: Option<String>
+    client_turns: Vec<Client>,
+    word_to_guess: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Game {
     pub game_id: String,
     pub game_state: GameState,
-    pub clients: HashMap<String, Client>
+    pub clients: HashMap<String, Client>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GameContainer {
     pub games_created: u32,
-    pub live_games: HashMap<String, Game>
+    pub live_games: HashMap<String, Game>,
+    pub test_word: Option<String>,
 }
 
 type Games = Arc<Mutex<GameContainer>>;
@@ -37,24 +40,28 @@ type Result<T> = std::result::Result<T, Rejection>;
 
 #[tokio::main]
 async fn main() {
-    let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
+    let game_container = GameContainer {
+        games_created: 0,
+        live_games: HashMap::new(),
+        test_word: None,
+    };
     let games: Games = Arc::new(Mutex::new(game_container));
 
     println!("Configuring websocket routes");
     let routes =
         new_route(&games)
-        .or(join_route(&games))
-        .with(warp::cors().allow_any_origin());
+            .or(join_route(&games))
+            .with(warp::cors().allow_any_origin());
 
     println!("Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
 
-fn with_games(games: Games) -> impl Filter<Extract = (Games,), Error = Infallible> + Clone {
+fn with_games(games: Games) -> impl Filter<Extract=(Games, ), Error=Infallible> + Clone {
     warp::any().map(move || games.clone())
 }
 
-fn new_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/new/<username>
     let new_route = ws_route
@@ -65,10 +72,10 @@ fn new_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejecti
         .and(with_games(games.clone()))
         .and_then(handlers::new_game_handler);
 
-   new_route
+    new_route
 }
 
-fn join_route(games: &Games) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/join/<session_id>/<username>
     let join_route = ws_route
@@ -94,6 +101,13 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
+    fn new_game_msg() -> String {
+        return json!({
+            "event": "new_game",
+            "payload": {"id": "1001"}
+        }).to_string();
+    }
+
     async fn assert_message(client: &mut WsClient, expected_message: &str) {
         let msg = client.recv().await.expect("recv");
         assert_eq!(msg.to_str(), Ok(expected_message));
@@ -110,8 +124,12 @@ mod tests {
         return;
     }
 
-    async fn empty_games_state() -> Games {
-        let game_container = GameContainer { games_created: 0, live_games: HashMap::new() };
+    async fn create_empty_games_state() -> Games {
+        let game_container = GameContainer {
+            games_created: 0,
+            live_games: HashMap::new(),
+            test_word: Some(String::from("testisana")),
+        };
         return Arc::new(Mutex::new(game_container));
     }
 
@@ -119,66 +137,349 @@ mod tests {
         let route = new_route(games);
 
         return warp::test::ws()
-                .path(&*format!("/ws/new/{}", username))
-                .handshake(route)
-                .await
-                .expect("handshake");
+            .path(&*format!("/ws/new/{}", username))
+            .handshake(route)
+            .await
+            .expect("handshake");
     }
 
     async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
         let route = join_route(games);
 
         return warp::test::ws()
-                .path(&*format!("/ws/join/{}/{}", game_id, username))
-                .handshake(route)
-                .await
-                .expect("handshake");
+            .path(&*format!("/ws/join/{}/{}", game_id, username))
+            .handshake(route)
+            .await
+            .expect("handshake");
     }
 
-    // TODO Case #1 when game is created send game id
+    // Case #1
+    #[tokio::test]
+    async fn new_game_creator_is_sent_the_game_id() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+
+        expect_received(&mut host_client, &*new_game_msg()).await;
+    }
 
     // Case #2
     #[tokio::test]
     async fn join_event_is_delivered_to_existing_players() {
-        let games= empty_games_state().await;
+        let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
-        // TODO Add player id to playload? -> Can't compare as a plain string then.
         let user2_joined_msg = json!({
             "event": "join",
-            "payload": {"name": "user2"}
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
 
         join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
             "event": "join",
-            "payload": {"name": "user3"}
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
 
-        let current_games = games.lock().await;
-        let game = current_games.live_games.get("1001").unwrap();
-        let clients = game.clone().clients;
-        assert_eq!(3, clients.len());
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            assert_eq!(3, clients.len());
+        } else {
+            assert!(false, "Could not get lock to assert game state.");
+        };
     }
 
-    // TODO Case #3 game start chooses word and notifies of roles
-    // TODO Case #4 hint is stored in state
-    // TODO Case #5 after last hint, duplicates notification is shown and guesser sees unique hints
+    // Case #3
+    #[tokio::test]
+    async fn staring_game_chooses_word_and_notifies_roles() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        // ---- Setup done ----
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            match game.clone().game_state.word_to_guess {
+                // TODO Assert that all hints are None
+                Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
+                None => assert!(false, "No word to guess in state.")
+            }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.");
+        };
+    }
+
+    // Case #4 & #5
+    #[tokio::test]
+    async fn sent_hints_are_stored_and_after_last_hint_duplicates_removed() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let user4_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user4_id",
+                "name": "user4"
+            }
+        });
+        expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*new_round_hinter_msg.to_string()).await;
+
+        // ---- Setup done ----
+
+        let hint2_msg = json!({
+            "action": {"hint": "vinkki2"}
+        });
+        second_client.send(Message::text(hint2_msg.to_string())).await;
+
+        let hint_received_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user2_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_msg.to_string()).await;
+
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            assert_eq!(Some(String::from("vinkki2")), clients.get("user2_id").unwrap().hint);
+        } else {
+            println!("Cloud not get lock to assert game state.");
+        };
+
+        // Case #5 Add more hints, after last hint, hints and duplicates notification is sent and
+        // guesser sees only unique hints
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_from3_msg.to_string()).await;
+
+        // Use same hint as user3 to cause a duplicate hint
+        fourth_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from4_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user4_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_from4_msg.to_string()).await;
+
+        let hints_to_guesser_msg = json!({
+            "event": "all_hints_to_guesser",
+            "payload": {"hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }],
+                        "usersWithDuplicates": ["user3_id", "user4_id"]
+                       }
+        });
+        expect_received(&mut host_client, &*hints_to_guesser_msg.to_string()).await;
+
+        let hints_to_hinters_msg = json!({
+            "event": "all_hints",
+            "payload": {"duplicates": [{"client": "user3_id",
+                                        "hint": "vinkki3"
+                                       },
+                                       {"client": "user4_id",
+                                        "hint": "vinkki3"
+                                       }],
+                        "hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }]
+                       }
+        });
+        expect_received(&mut second_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut third_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hints_to_hinters_msg.to_string()).await;
+    }
+
     // TODO Case #6 guesser's guess is shown
-    // TODO Case #7 select next guesser and word... -> #2
+
+    // Case #7
+    #[tokio::test]
+    async fn requesting_new_round_gives_word_and_notifies_roles() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            match game.clone().game_state.word_to_guess {
+                //TODO Assert that all hints are None
+                Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
+                None => assert!(false, "No word to guess in state.")
+            }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.")
+        };
+
+        // ---- Setup done ----
+
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+
+        expect_received(&mut host_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut second_client, &*new_round_guesser_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+    }
 
     // Nice to have
     // TODO Case #2.1 trying to join non-existent game gives clear error
-    // TODO Case #2.2 player quit event
+    // TODO Case #2.2 player quit event (before start)
+    // TODO Case #2.3 player quit event (as guesser)
+    // TODO Case #2.4 player quit event (as hint giver)
     // TODO Case #3.1 can't start game with only one player
     // TODO Case #6.1 score is updated in state and notified to players
 
     // Under consideration
-    // TODO Case #100.1 re-join with existing username
-    // TODO Case #100.2 heartbeat to drop a player who has lost connection
+    // TODO Case #100 "user NN is typing"
+    // TODO Case #101 re-join with existing username
+    // TODO Case #102 heartbeat to drop a player who has lost connection
+    // TODO Case #103 action: skip word -> #7 minus role rolling
+    // TODO Case #104 test multiple concurrent games
 }
