@@ -264,7 +264,7 @@ mod tests {
 
     // Case #4 & #5
     #[tokio::test]
-    async fn sent_hints_are_stored_and_after_last_hint_duplicates_removed() {
+    async fn sent_hints_are_stored_and_after_last_hint_result_are_sent() {
         let games = create_empty_games_state().await;
 
         let mut host_client = start_game(&games, "user1").await;
@@ -399,7 +399,313 @@ mod tests {
         expect_received(&mut fourth_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
-    // TODO Case #6 guesser's guess is shown
+    // Case #6.1
+    #[tokio::test]
+    async fn correct_guess_is_given() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let user4_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user4_id",
+                "name": "user4"
+            }
+        });
+        expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*new_round_hinter_msg.to_string()).await;
+
+        let hint2_msg = json!({
+            "action": {"hint": "vinkki2"}
+        });
+        second_client.send(Message::text(hint2_msg.to_string())).await;
+
+        let hint_received_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user2_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_msg.to_string()).await;
+
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            assert_eq!(Some(String::from("vinkki2")), clients.get("user2_id").unwrap().hint);
+        } else {
+            println!("Cloud not get lock to assert game state.");
+        };
+
+        // Case #5 Add more hints, after last hint, hints and duplicates notification is sent and
+        // guesser sees only unique hints
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_from3_msg.to_string()).await;
+
+        // Use same hint as user3 to cause a duplicate hint
+        fourth_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from4_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user4_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_from4_msg.to_string()).await;
+
+        let hints_to_guesser_msg = json!({
+            "event": "all_hints_to_guesser",
+            "payload": {"hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }],
+                        "usersWithDuplicates": ["user3_id", "user4_id"]
+                       }
+        });
+        expect_received(&mut host_client, &*hints_to_guesser_msg.to_string()).await;
+
+        let hints_to_hinters_msg = json!({
+            "event": "all_hints",
+            "payload": {"duplicates": [{"client": "user3_id",
+                                        "hint": "vinkki3"
+                                       },
+                                       {"client": "user4_id",
+                                        "hint": "vinkki3"
+                                       }],
+                        "hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }]
+                       }
+        });
+        expect_received(&mut second_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut third_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hints_to_hinters_msg.to_string()).await;
+
+        // ---- Setup done ----
+
+        let correct_guess_msg = json!({
+            "action": {"guess": "testisana"}
+        });
+        host_client.send(Message::text(correct_guess_msg.to_string())).await;
+
+        let correct_result_msg = json!({
+            "event": "guess_result",
+            "payload": {"result": "correct",
+                         "word": "testisana"
+                       }
+        });
+
+        expect_received(&mut host_client, &*correct_result_msg.to_string()).await;
+        expect_received(&mut second_client, &*correct_result_msg.to_string()).await;
+        expect_received(&mut third_client, &*correct_result_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*correct_result_msg.to_string()).await;
+    }
+
+    // Case #6.2
+    #[tokio::test]
+    async fn incorrect_guess_is_given() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+
+        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let user4_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user4_id",
+                "name": "user4"
+            }
+        });
+        expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*new_round_hinter_msg.to_string()).await;
+
+        let hint2_msg = json!({
+            "action": {"hint": "vinkki2"}
+        });
+        second_client.send(Message::text(hint2_msg.to_string())).await;
+
+        let hint_received_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user2_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_msg.to_string()).await;
+
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            let clients = game.clone().clients;
+            assert_eq!(Some(String::from("vinkki2")), clients.get("user2_id").unwrap().hint);
+        } else {
+            println!("Cloud not get lock to assert game state.");
+        };
+
+        // Case #5 Add more hints, after last hint, hints and duplicates notification is sent and
+        // guesser sees only unique hints
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hint_received_from3_msg.to_string()).await;
+
+        // Use same hint as user3 to cause a duplicate hint
+        fourth_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from4_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user4_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from4_msg.to_string()).await;
+        expect_received(&mut third_client, &*hint_received_from4_msg.to_string()).await;
+
+        let hints_to_guesser_msg = json!({
+            "event": "all_hints_to_guesser",
+            "payload": {"hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }],
+                        "usersWithDuplicates": ["user3_id", "user4_id"]
+                       }
+        });
+        expect_received(&mut host_client, &*hints_to_guesser_msg.to_string()).await;
+
+        let hints_to_hinters_msg = json!({
+            "event": "all_hints",
+            "payload": {"duplicates": [{"client": "user3_id",
+                                        "hint": "vinkki3"
+                                       },
+                                       {"client": "user4_id",
+                                        "hint": "vinkki3"
+                                       }],
+                        "hints": [{"client": "user2_id",
+                                   "hint": "vinkki2"
+                                  }]
+                       }
+        });
+        expect_received(&mut second_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut third_client, &*hints_to_hinters_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*hints_to_hinters_msg.to_string()).await;
+
+        // ---- Setup done ----
+
+        let incorrect_guess_msg = json!({
+            "action": {"guess": "wrong"}
+        });
+        host_client.send(Message::text(incorrect_guess_msg.to_string())).await;
+
+        let incorrect_result_msg = json!({
+            "event": "guess_result",
+            "payload": { "result": "incorrect",
+                         "word": "testisana"
+                       }
+        });
+
+        expect_received(&mut host_client, &*incorrect_result_msg.to_string()).await;
+        expect_received(&mut second_client, &*incorrect_result_msg.to_string()).await;
+        expect_received(&mut third_client, &*incorrect_result_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*incorrect_result_msg.to_string()).await;
+    }
 
     // Case #7
     #[tokio::test]
@@ -474,7 +780,7 @@ mod tests {
     // TODO Case #2.3 player quit event (as guesser)
     // TODO Case #2.4 player quit event (as hint giver)
     // TODO Case #3.1 can't start game with only one player
-    // TODO Case #6.1 score is updated in state and notified to players
+    // TODO Case #6.3 score is updated in state and notified to players
 
     // Under consideration
     // TODO Case #100 "user NN is typing"

@@ -24,6 +24,7 @@ pub struct ActionMessage {
 pub enum Action {
     StartNextRoundAction(StartNextRound),
     HintAction(Hint),
+    GuessAction(Guess),
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -34,6 +35,11 @@ pub struct StartNextRound {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Hint {
     pub hint: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Guess {
+    pub guess: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -213,7 +219,8 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
 
             match action_message.action {
                 Action::StartNextRoundAction(_) => start_next_round(game_id, games).await,
-                Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await
+                Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await,
+                Action::GuessAction(guess) => check_guess(guess.guess, game_id, games).await
             }
         }
         Err(e) => {
@@ -304,10 +311,6 @@ async fn start_next_round(game_id: &str, games: &Games) {
     return;
 }
 
-fn is_all_hints_given(clients: &HashMap<String, Client>) -> bool {
-    return clients.iter().filter(|(_, client)| client.hint != None).count() == clients.len() - 1;
-}
-
 async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
     println!("{} {}", client_id, hint);
 
@@ -379,6 +382,10 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
     return;
 }
 
+fn is_all_hints_given(clients: &HashMap<String, Client>) -> bool {
+    return clients.iter().filter(|(_, client)| client.hint != None).count() == clients.len() - 1;
+}
+
 fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Vec<Client>> {
     return clients
         .into_iter()
@@ -429,6 +436,37 @@ fn as_client_and_hints(clients: Vec<Client>) -> Vec<ClientAndHint> {
 
     client_and_hints.sort_by(|client_a, client_b| client_a.client.cmp(&client_b.client));
     return client_and_hints;
+}
+
+async fn check_guess(guess: String, game_id: &str, games: &Games) {
+    println!("Guess: {}", guess);
+
+    if let Ok(mut editable_games) = games.try_lock() {
+        match editable_games.live_games.get_mut(game_id) {
+            Some(game) => {
+                let result = if Some(guess) == game.game_state.word_to_guess {
+                    "correct"
+                } else {
+                    "incorrect"
+                };
+
+                let guess_result_message = json!({
+                        "event": "guess_result",
+                        "payload": {"result": result,
+                                    "word": game.game_state.word_to_guess
+                       }
+                    });
+
+                let clients = game.clients.clone().into_iter().map(|(_, client)| client).collect::<Vec<_>>();
+                for client in clients {
+                    send_message(&client, &*guess_result_message.to_string()).await;
+                }
+            }
+            None => return // TODO Oh, no! Game not found! Return error?
+        }
+    } else {
+        println!("Could not get lock for game state.");
+    };
 }
 
 fn remove_client(games: &Games, game_id: &str, client_id: &str) {
