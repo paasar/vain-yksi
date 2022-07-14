@@ -838,9 +838,10 @@ mod tests {
 
     // Nice to have
     // TODO Case #2.1 trying to join non-existent game gives clear error
-    // TODO Case #2.2 player quit event (before start)
-    // TODO Case #2.3 player quit event (as guesser)
-    // TODO Case #2.4 player quit event (as hint giver)
+    // TODO Case #2.2 join after game is started
+    // TODO Case #2.3 player quit event (before start)
+    // TODO Case #2.4 player quit event (as guesser)
+    // TODO Case #2.5 player quit event (as hint giver)
     // TODO Case #3.1 can't start game with only one player
     // TODO Case #6.3 score is updated in state and notified to players
 
@@ -848,6 +849,5 @@ mod tests {
     // TODO Case #100 "user NN is typing"
     // TODO Case #101 re-join with existing username
     // TODO Case #102 heartbeat to drop a player who has lost connection
-    // TODO Case #103 action: skip word -> #7 minus role rolling
     // TODO Case #104 test multiple concurrent games
 }
