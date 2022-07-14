@@ -22,9 +22,15 @@ pub struct ActionMessage {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Action {
+    SkipWordAction(SkipWord),
     StartNextRoundAction(StartNextRound),
     HintAction(Hint),
     GuessAction(Guess),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct SkipWord {
+    pub skip_word: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -218,9 +224,10 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
             println!("Parsed ActionMessage: {:?}", action_message);
 
             match action_message.action {
-                Action::StartNextRoundAction(_) => start_next_round(game_id, games).await,
+                Action::SkipWordAction(_) => start_next_round(game_id, games, false).await,
+                Action::StartNextRoundAction(_) => start_next_round(game_id, games, true).await,
                 Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await,
-                Action::GuessAction(guess) => check_guess(guess.guess, game_id, games).await
+                Action::GuessAction(guess) => check_guess(guess.guess, game_id, games).await,
             }
         }
         Err(e) => {
@@ -261,7 +268,7 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
     return;
 }
 
-async fn start_next_round(game_id: &str, games: &Games) {
+async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
     let word = if let Ok(current_games) = games.try_lock() {
         let word = match &current_games.test_word {
             Some(w) => w.clone(),
@@ -280,12 +287,14 @@ async fn start_next_round(game_id: &str, games: &Games) {
                 let game_state = &mut game.game_state;
                 game_state.word_to_guess = Some(word.clone());
 
-                let guesser = game_state.client_turns.remove(0);
+                let guesser_index: usize = get_guesser_index(&game_state, roll_roles);
+                let guesser = game_state.client_turns.remove(guesser_index);
                 let you_are_guesser_message = json!({
                     "event": "new_round",
                     "payload": {"role": "guesser"}
                 });
                 send_message(&guesser, &*you_are_guesser_message.to_string()).await;
+
                 let hinters = game_state.client_turns.clone();
                 let you_are_hinter_message = json!({
                     "event": "new_round",
@@ -309,6 +318,14 @@ async fn start_next_round(game_id: &str, games: &Games) {
     };
 
     return;
+}
+
+fn get_guesser_index(game_state: &GameState, roll_roles: bool) -> usize {
+    if roll_roles {
+        0
+    } else {
+        game_state.client_turns.len() - 1
+    }
 }
 
 async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {

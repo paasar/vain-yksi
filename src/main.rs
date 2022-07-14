@@ -774,6 +774,68 @@ mod tests {
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
     }
 
+    // Case #8
+    #[tokio::test]
+    async fn skip_word_and_retain_roles() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+
+        let start_next_round_msg = json!({
+            "action": {"start_next_round": true}
+        });
+        host_client.send(Message::text(start_next_round_msg.to_string())).await;
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
+
+        // ---- Setup done ----
+
+        if let Ok(mut current_games) = games.try_lock() {
+            current_games.test_word = Some(String::from("sanatesti"));
+        } else {
+            assert!(false, "Cloud not get lock to change game state.")
+        }
+
+        let skip_word_msg = json!({
+            "action": {"skip_word": true}
+        });
+        host_client.send(Message::text(skip_word_msg.to_string())).await;
+
+        let new_round_guesser_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "guesser"}
+        });
+        expect_received(&mut host_client, &*new_round_guesser_msg.to_string()).await;
+
+        let new_round_hinter_with_new_word_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "sanatesti"}
+        });
+        expect_received(&mut second_client, &*new_round_hinter_with_new_word_msg.to_string()).await;
+    }
+
     // Nice to have
     // TODO Case #2.1 trying to join non-existent game gives clear error
     // TODO Case #2.2 player quit event (before start)
