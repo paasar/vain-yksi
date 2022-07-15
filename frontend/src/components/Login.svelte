@@ -1,6 +1,7 @@
 <script lang="ts">
-    import { createGame } from '../WebSocket';
+    import { createGame, joinGame } from '../WebSocket';
     let username;
+    let gameIdToJoin;
 </script>
 
 <div>
@@ -8,6 +9,13 @@
     <input id="username" type="text" maxlength="30" bind:value={username} />
     <div>
         <button on:click={() => createGame(username)}>Luo uusi peli</button>
+    </div>
+</div>
+<div>
+    <label for="gameIdToJoin">Pelikoodi</label>
+    <input id="gameIdToJoin" type="number" minlength="4" maxlength="4" min="1001" max="9999" bind:value={gameIdToJoin} />
+    <div>
+        <button on:click={() => joinGame(gameIdToJoin, username)}>Liity peliin</button>
     </div>
 </div>
 
