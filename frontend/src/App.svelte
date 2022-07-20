@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { gameId } from './WebSocket';
+    import { gameId, playerData } from './WebSocket';
     import Login from './components/Login.svelte';
 </script>
 
@@ -8,6 +8,9 @@
   <div class="game-info">
     {#if $gameId}
       Pelin tunnus: {$gameId}
+      {#if $playerData}
+      Sinä: {$playerData.username}, ID: {$playerData.id}
+      {/if}
     {:else}
       <Login />
     {/if}

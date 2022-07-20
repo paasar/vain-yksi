@@ -1,11 +1,24 @@
-import { writable } from 'svelte/store';
+import { writable, type Writable } from 'svelte/store';
 
 let socket: WebSocket;
 
 export let gameId = writable('');
+export let playerData: Writable<YourData> = writable(null);
+
+// TODO
+// class Game {
+//   word: string
+//   player: YourData
+//   allPlayers: PlayerData[]
+// }
+
+// class PlayerData {
+//   id: string
+//   username: string
+//   hintGiven?: boolean
+// }
 
 // TODO EVENTS:
-// TODO my data (after join)
 // TODO player join
 // TODO start next round (guesser, hinter)
 // TODO hint received
@@ -13,12 +26,13 @@ export let gameId = writable('');
 // TODO result (correct, incorrect)
 enum EventType {
   NEW_GAME = "new_game",
-  USER_JOIN = "join"
+  USER_JOIN = "join",
+  YOUR_DATA = "your_data",
 }
 
 interface Event {
   event: EventType
-  payload: NewGame | UserJoin
+  payload: NewGame | UserJoin | YourData
 }
 
 class NewGame {
@@ -28,6 +42,11 @@ class NewGame {
 class UserJoin {
   id: string
   name: string
+}
+
+class YourData {
+  id: string
+  username: string
 }
 
 export function createGame(username: string) {
@@ -59,6 +78,10 @@ function addSocketHandlers(mySocket: WebSocket) {
       case EventType.USER_JOIN:
         let userJoin = receivedEvent.payload as UserJoin;
         console.log('2Join event!', userJoin.id, userJoin.name);
+        break;
+      case EventType.YOUR_DATA:
+        let yourData = receivedEvent.payload as YourData;
+        playerData.set(yourData);
         break;
       default: console.log("2Unknown event:", typeof receivedEvent);
     }
