@@ -108,6 +108,14 @@ mod tests {
         }).to_string();
     }
 
+    fn your_data_msg(username: &str) -> String {
+        return json!({
+            "event": "your_data",
+            "payload": {"id": format!("{}_id", username),
+                        "username": username}
+        }).to_string();
+    }
+
     async fn assert_message(client: &mut WsClient, expected_message: &str) {
         let msg = client.recv().await.expect("recv");
         assert_eq!(msg.to_str(), Ok(expected_message));
@@ -161,6 +169,7 @@ mod tests {
         let mut host_client = start_game(&games, "user1").await;
 
         expect_received(&mut host_client, &*new_game_msg()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
     }
 
     // Case #2
@@ -170,6 +179,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -180,8 +190,9 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -191,6 +202,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         if let Ok(current_games) = games.try_lock() {
             let game = current_games.live_games.get("1001").unwrap();
@@ -208,6 +220,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -218,6 +231,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
@@ -229,6 +243,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         // ---- Setup done ----
 
@@ -269,6 +284,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -279,6 +295,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
@@ -290,6 +307,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
         let user4_joined_msg = json!({
@@ -302,6 +320,7 @@ mod tests {
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
             "action": {"start_next_round": true}
@@ -406,6 +425,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -416,6 +436,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
@@ -427,6 +448,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
         let user4_joined_msg = json!({
@@ -439,6 +461,7 @@ mod tests {
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
             "action": {"start_next_round": true}
@@ -560,6 +583,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -570,6 +594,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
@@ -581,6 +606,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
         let user4_joined_msg = json!({
@@ -593,6 +619,7 @@ mod tests {
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
             "action": {"start_next_round": true}
@@ -714,6 +741,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -724,6 +752,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
         let user3_joined_msg = json!({
@@ -735,6 +764,7 @@ mod tests {
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let start_next_round_msg = json!({
             "action": {"start_next_round": true}
@@ -781,6 +811,7 @@ mod tests {
 
         let mut host_client = start_game(&games, "user1").await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
         let mut second_client = join_game(&games, "1001", "user2").await;
         let user2_joined_msg = json!({
@@ -791,6 +822,7 @@ mod tests {
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let start_next_round_msg = json!({
             "action": {"start_next_round": true}
@@ -836,18 +868,62 @@ mod tests {
         expect_received(&mut second_client, &*new_round_hinter_with_new_word_msg.to_string()).await;
     }
 
+    // Case #9
+    #[tokio::test]
+    async fn player_quit_is_informed_to_all_others() {
+        let games = create_empty_games_state().await;
+
+        let mut host_client = start_game(&games, "user1").await;
+        expect_received(&mut host_client, &*new_game_msg().to_string()).await;
+        expect_received(&mut host_client, &*your_data_msg("user1")).await;
+
+        let mut second_client = join_game(&games, "1001", "user2").await;
+        let user2_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user2_id",
+                "name": "user2"
+            }
+        });
+        expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*your_data_msg("user2")).await;
+
+        let mut third_client = join_game(&games, "1001", "user3").await;
+        let user3_joined_msg = json!({
+            "event": "join",
+            "payload": {
+                "id": "user3_id",
+                "name": "user3"
+            }
+        });
+        expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*your_data_msg("user3")).await;
+
+        // ---- Setup done ----
+
+        drop(third_client);
+
+        let user_quit_msg = json!({
+            "event": "quit",
+            "payload": {"id": "user3_id"}
+        });
+
+        expect_received(&mut host_client, &*user_quit_msg.to_string()).await;
+        expect_received(&mut second_client, &*user_quit_msg.to_string()).await;
+    }
+
     // Nice to have
     // TODO Case #2.1 trying to join non-existent game gives clear error
-    // TODO Case #2.2 player quit event (before start)
-    // TODO Case #2.3 player quit event (as guesser)
-    // TODO Case #2.4 player quit event (as hint giver)
+    // TODO Case #2.2 join after game is started
     // TODO Case #3.1 can't start game with only one player
     // TODO Case #6.3 score is updated in state and notified to players
+    // TODO Case #9.1 player quit event (as guesser)
+    // TODO Case #9.2 player quit event (as hint giver)
 
     // Under consideration
     // TODO Case #100 "user NN is typing"
     // TODO Case #101 re-join with existing username
     // TODO Case #102 heartbeat to drop a player who has lost connection
-    // TODO Case #103 action: skip word -> #7 minus role rolling
     // TODO Case #104 test multiple concurrent games
 }

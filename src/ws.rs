@@ -60,7 +60,7 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
 
     let new_game_id = create_new_game_id(&games);
 
-    let (client_id, new_client) = create_client(username, client_sender);
+    let (client_id, new_client) = create_client(username.clone(), client_sender);
 
     let new_game = create_game_with_id(&new_game_id, client_id.clone(), new_client.clone());
 
@@ -77,23 +77,35 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
                 });
     send_message(&new_client, &*new_game_message.to_string()).await;
 
+    send_message(&new_client, &*user_data_message(&client_id, &username)).await;
+
     handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id).await;
 
-    remove_client(&games, &new_game_id, &client_id);
+    remove_client(&games, &new_game_id, &client_id).await;
+}
+
+fn user_data_message(client_id: &str, username: &str) -> String {
+    return json!({
+                    "event": "your_data",
+                    "payload": {"id": client_id,
+                                "username": username}
+                }).to_string();
 }
 
 pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: String) {
     println!("Finding game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
 
-    let (client_id, new_client) = create_client(username, client_sender);
+    let (client_id, new_client) = create_client(username.clone(), client_sender);
 
     println!("FIND GAME");
-    add_client_to_game(client_id.clone(), new_client, &games, &game_id).await;
+    add_client_to_game(client_id.clone(), new_client.clone(), &games, &game_id).await;
+
+    send_message(&new_client, &*user_data_message(&client_id, &username)).await;
 
     handle_messages(&mut client_ws_rcv, &client_id, &games, &game_id).await;
 
-    remove_client(&games, &game_id, &client_id);
+    remove_client(&games, &game_id, &client_id).await;
 }
 
 fn establish_websocket_connection(ws: WebSocket) -> (SplitStream<WebSocket>, UnboundedSender<Result<Message, warp::Error>>) {
@@ -486,7 +498,7 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
     };
 }
 
-fn remove_client(games: &Games, game_id: &str, client_id: &str) {
+async fn remove_client(games: &Games, game_id: &str, client_id: &str) {
     println!("Removing client '{}' from game", client_id);
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
@@ -497,6 +509,14 @@ fn remove_client(games: &Games, game_id: &str, client_id: &str) {
                 let game_state = &mut game.game_state;
                 game_state.client_turns.retain(|c| c.client_id != client_id);
                 println!("{} disconnected", client_id);
+
+                for (_, client) in clients {
+                    let user_quit_message = json!({
+                        "event": "quit",
+                        "payload": {"id": client_id}
+                    });
+                    send_message(client, &*user_quit_message.to_string()).await;
+                }
                 // TODO Remove game when last client disconnects?
             }
             None => return // TODO Oh, no! Game not found! Return error?
