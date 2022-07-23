@@ -17,6 +17,10 @@ export class PlayerJoin {
   id: string
   name: string
 }
+
+export class PlayerQuit {
+  id: string
+}
   
 export class YourData {
   id: string

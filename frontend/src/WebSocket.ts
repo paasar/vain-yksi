@@ -1,4 +1,4 @@
-import { PlayerData, type NewGame, type PlayerJoin, type YourData } from './GameState';
+import { PlayerData, type NewGame, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
@@ -11,6 +11,7 @@ let socket: WebSocket;
 enum EventType {
   NEW_GAME = "new_game",
   PLAYER_JOIN = "join",
+  PLAYER_QUIT = "quit",
   YOUR_DATA = "your_data",
 }
 
@@ -41,8 +42,6 @@ function addSocketHandlers(mySocket: WebSocket) {
     console.log(`[message] Data received from server: ${event.data} ${typeof event.data}`);
     let receivedEvent: Event = JSON.parse(event.data);
 
-    console.log("Event", receivedEvent.event, receivedEvent.payload.id);
-
     switch (receivedEvent.event) {
       case EventType.NEW_GAME:
         let newGame = receivedEvent.payload as NewGame;
@@ -50,10 +49,15 @@ function addSocketHandlers(mySocket: WebSocket) {
         game.update(g => {g.id = newGame.id; return g;});
         break;
       case EventType.PLAYER_JOIN:
-        let userJoin = receivedEvent.payload as PlayerJoin;
-        console.log('Join event!', userJoin.id, userJoin.name);
-        let otherPlayerData = new PlayerData(userJoin.id, userJoin.name);
-        game.update(g => {g.allPlayers.push(otherPlayerData); return g;})
+        let playerJoin = receivedEvent.payload as PlayerJoin;
+        console.log('Join event!', playerJoin.id, playerJoin.name);
+        let otherPlayerData = new PlayerData(playerJoin.id, playerJoin.name);
+        game.update(g => {g.allPlayers.push(otherPlayerData); return g;});
+        break;
+      case EventType.PLAYER_QUIT:
+        let playerQuit = receivedEvent.payload as PlayerQuit;
+        console.log('Quit event!', playerQuit.id);
+        game.update(g => {g.allPlayers = g.allPlayers.filter(p => p.id !== playerQuit.id); return g;});
         break;
       case EventType.YOUR_DATA:
         let yourData = receivedEvent.payload as YourData;
