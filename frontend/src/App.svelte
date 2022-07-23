@@ -1,5 +1,6 @@
 <script lang="ts">
     import { game } from './GameState';
+    import Lobby from './components/Lobby.svelte';
     import Login from './components/Login.svelte';
 </script>
 
@@ -7,10 +8,7 @@
   <h1>Vain Yksi</h1>
   <div class="game-info">
     {#if $game.id}
-      Pelin tunnus: {$game.id}
-      {#if $game.player}
-      Sinä: {$game.player.username}, ID: {$game.player.id}
-      {/if}
+      <Lobby />
     {:else}
       <Login />
     {/if}

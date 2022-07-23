@@ -1,26 +1,22 @@
-import type { NewGame, UserJoin, YourData } from './GameState';
+import { PlayerData, type NewGame, type PlayerJoin, type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
 
-// export let gameId = writable('');
-// export let playerData: Writable<YourData> = writable(null);
-
 // TODO EVENTS:
-// TODO player join
 // TODO start next round (guesser, hinter)
 // TODO hint received
 // TODO all hints received (guesser, hinter)
 // TODO result (correct, incorrect)
 enum EventType {
   NEW_GAME = "new_game",
-  USER_JOIN = "join",
+  PLAYER_JOIN = "join",
   YOUR_DATA = "your_data",
 }
 
 interface Event {
   event: EventType
-  payload: NewGame | UserJoin | YourData
+  payload: NewGame | PlayerJoin | YourData
 }
 
 export function createGame(username: string) {
@@ -53,13 +49,16 @@ function addSocketHandlers(mySocket: WebSocket) {
         console.log('NewGame event!', newGame.id);
         game.update(g => {g.id = newGame.id; return g;});
         break;
-      case EventType.USER_JOIN:
-        let userJoin = receivedEvent.payload as UserJoin;
+      case EventType.PLAYER_JOIN:
+        let userJoin = receivedEvent.payload as PlayerJoin;
         console.log('Join event!', userJoin.id, userJoin.name);
+        let otherPlayerData = new PlayerData(userJoin.id, userJoin.name);
+        game.update(g => {g.allPlayers.push(otherPlayerData); return g;})
         break;
       case EventType.YOUR_DATA:
         let yourData = receivedEvent.payload as YourData;
-        game.update(g => {g.player = yourData; return g;});
+        let playerData = new PlayerData(yourData.id, yourData.username);
+        game.update(g => {g.player = playerData; return g;});
         break;
       default: console.log("Unknown event:", typeof receivedEvent);
     }
