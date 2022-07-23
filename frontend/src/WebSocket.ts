@@ -1,22 +1,10 @@
-import { writable, type Writable } from 'svelte/store';
+import type { NewGame, UserJoin, YourData } from './GameState';
+import { game } from './GameState';
 
 let socket: WebSocket;
 
-export let gameId = writable('');
-export let playerData: Writable<YourData> = writable(null);
-
-// TODO
-// class Game {
-//   word: string
-//   player: YourData
-//   allPlayers: PlayerData[]
-// }
-
-// class PlayerData {
-//   id: string
-//   username: string
-//   hintGiven?: boolean
-// }
+// export let gameId = writable('');
+// export let playerData: Writable<YourData> = writable(null);
 
 // TODO EVENTS:
 // TODO player join
@@ -35,20 +23,6 @@ interface Event {
   payload: NewGame | UserJoin | YourData
 }
 
-class NewGame {
-  id: string
-}
-
-class UserJoin {
-  id: string
-  name: string
-}
-
-class YourData {
-  id: string
-  username: string
-}
-
 export function createGame(username: string) {
   socket = new WebSocket(`ws://localhost:8000/ws/new/${username}`);
 
@@ -58,6 +32,7 @@ export function createGame(username: string) {
 export function joinGame(gameIdToJoin: string, username: string) {
   socket = new WebSocket(`ws://localhost:8000/ws/join/${gameIdToJoin}/${username}`);
 
+  game.update(g => {g.id = gameIdToJoin; return g;});
   addSocketHandlers(socket);
 };
 
@@ -70,25 +45,24 @@ function addSocketHandlers(mySocket: WebSocket) {
     console.log(`[message] Data received from server: ${event.data} ${typeof event.data}`);
     let receivedEvent: Event = JSON.parse(event.data);
 
+    console.log("Event", receivedEvent.event, receivedEvent.payload.id);
+
     switch (receivedEvent.event) {
       case EventType.NEW_GAME:
         let newGame = receivedEvent.payload as NewGame;
-        console.log('2NewGame event!', newGame.id);
+        console.log('NewGame event!', newGame.id);
+        game.update(g => {g.id = newGame.id; return g;});
         break;
       case EventType.USER_JOIN:
         let userJoin = receivedEvent.payload as UserJoin;
-        console.log('2Join event!', userJoin.id, userJoin.name);
+        console.log('Join event!', userJoin.id, userJoin.name);
         break;
       case EventType.YOUR_DATA:
         let yourData = receivedEvent.payload as YourData;
-        playerData.set(yourData);
+        game.update(g => {g.player = yourData; return g;});
         break;
-      default: console.log("2Unknown event:", typeof receivedEvent);
+      default: console.log("Unknown event:", typeof receivedEvent);
     }
-
-    console.log("Event", receivedEvent.event, receivedEvent.payload.id);
-
-    gameId.set(receivedEvent.payload.id);
   };
 
   mySocket.onclose = function(event) {
@@ -102,6 +76,6 @@ function addSocketHandlers(mySocket: WebSocket) {
   };
 
   mySocket.onerror = function(error) {
-    console.log(`[error] ${error.message}`);
+    console.log(`[error] ${error}`);
   };
 }
