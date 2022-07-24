@@ -1,5 +1,6 @@
 <script type="ts">
     import { game } from '../GameState';
+    import { startNextRound } from '../WebSocket';
 </script>
 
 <div>
@@ -9,7 +10,7 @@
     {/if}
 </div>
 
-<button>Aloita peli</button>
+<button on:click={() => startNextRound()}>Aloita peli</button>
 
 <div>
     <h2>Liittyneet pelaajat</h2>

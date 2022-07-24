@@ -1,4 +1,4 @@
-import { PlayerData, type NewGame, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
+import { PlayerData, type NewGame, type NewRound, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
@@ -10,6 +10,7 @@ let socket: WebSocket;
 // TODO result (correct, incorrect)
 enum EventType {
   NEW_GAME = "new_game",
+  NEW_ROUND = "new_round",
   OTHER_PLAYERS = "other_players",
   PLAYER_JOIN = "join",
   PLAYER_QUIT = "quit",
@@ -18,7 +19,7 @@ enum EventType {
 
 interface Event {
   event: EventType
-  payload: NewGame | OtherPlayers | PlayerJoin | YourData
+  payload: NewGame | NewRound | OtherPlayers | PlayerJoin | YourData
 }
 
 export function createGame(username: string) {
@@ -34,6 +35,11 @@ export function joinGame(gameIdToJoin: string, username: string) {
   addSocketHandlers(socket);
 };
 
+export function startNextRound() {
+  console.log("Starting next round");
+  socket.send(JSON.stringify({"action": {"start_next_round": true}}));
+}
+
 function addSocketHandlers(mySocket: WebSocket) {
   mySocket.onopen = function(e) {
     console.log("[open] Connection established");
@@ -48,6 +54,22 @@ function addSocketHandlers(mySocket: WebSocket) {
         let newGame = receivedEvent.payload as NewGame;
         console.log('NewGame event!', newGame.id);
         game.update(g => {g.id = newGame.id; return g;});
+        break;
+      case EventType.NEW_ROUND:
+        let newRound = receivedEvent.payload as NewRound;
+        console.log('NewRound event!', newRound.role, newRound.word);
+        game.update(g => {g.word = newRound.word; g.player.guesser = newRound.role === "guesser"; return g;});
+        game.update(g => {g.otherPlayers = g.otherPlayers.map(player => {
+            if (player.id === newRound.guesser) {
+              player.guesser = true;
+            } else {
+              player.guesser = false;
+            }
+            return player;
+          });
+          return g;
+        });
+        game.update(g => {g.gameStarted = true; return g;});
         break;
       case EventType.OTHER_PLAYERS:
         let otherPlayers = receivedEvent.payload as OtherPlayers;

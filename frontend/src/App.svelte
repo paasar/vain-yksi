@@ -1,5 +1,6 @@
 <script lang="ts">
     import { game } from './GameState';
+    import GuessAndHint from './components/GuessAndHint.svelte';
     import Lobby from './components/Lobby.svelte';
     import Login from './components/Login.svelte';
 </script>
@@ -7,7 +8,9 @@
 <main>
   <h1>Vain Yksi</h1>
   <div class="game-info">
-    {#if $game.id}
+    {#if $game.gameStarted}
+      <GuessAndHint />
+    {:else if $game.id}
       <Lobby />
     {:else}
       <Login />

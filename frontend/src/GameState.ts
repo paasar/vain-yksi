@@ -2,6 +2,7 @@ import { writable, type Writable } from 'svelte/store';
 
 class Game {
   id?: string
+  gameStarted: boolean = false
   word?: string
   player?: PlayerData
   otherPlayers: PlayerData[] = []
@@ -11,6 +12,12 @@ export let game = writable(new Game());
 
 export class NewGame {
    id: string
+}
+
+export class NewRound {
+    role: string
+    word?: string
+    guesser?: string
 }
 
 export type OtherPlayers = PlayerData[]
