@@ -1,14 +1,14 @@
-import { PlayerData, type NewGame, type NewRound, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
+import { PlayerData, type HintReceived, type NewGame, type NewRound, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
 
 // TODO EVENTS:
-// TODO start next round (guesser, hinter)
 // TODO hint received
 // TODO all hints received (guesser, hinter)
 // TODO result (correct, incorrect)
 enum EventType {
+  HINT_RECEIVED = "hint_received",
   NEW_GAME = "new_game",
   NEW_ROUND = "new_round",
   OTHER_PLAYERS = "other_players",
@@ -19,7 +19,7 @@ enum EventType {
 
 interface Event {
   event: EventType
-  payload: NewGame | NewRound | OtherPlayers | PlayerJoin | YourData
+  payload: HintReceived | NewGame | NewRound | OtherPlayers | PlayerJoin | YourData
 }
 
 export function createGame(username: string) {
@@ -40,6 +40,12 @@ export function startNextRound() {
   socket.send(JSON.stringify({"action": {"start_next_round": true}}));
 }
 
+export function sendHint(hint: string) {
+  console.log("Sending hint", hint);
+  socket.send(JSON.stringify({"action": {"hint": hint}}));
+  game.update(g => {g.player.hintGiven = true; return g;});
+}
+
 function addSocketHandlers(mySocket: WebSocket) {
   mySocket.onopen = function(e) {
     console.log("[open] Connection established");
@@ -50,6 +56,16 @@ function addSocketHandlers(mySocket: WebSocket) {
     let receivedEvent: Event = JSON.parse(event.data);
 
     switch (receivedEvent.event) {
+      case EventType.HINT_RECEIVED:
+        let hintReceived = receivedEvent.payload as HintReceived;
+        game.update(g => {g.otherPlayers = g.otherPlayers.map(player => {
+            if (player.id === hintReceived.client) {
+              player.hintGiven = true;
+            }
+            return player;
+          });
+          return g;});
+        break;
       case EventType.NEW_GAME:
         let newGame = receivedEvent.payload as NewGame;
         console.log('NewGame event!', newGame.id);
@@ -58,7 +74,12 @@ function addSocketHandlers(mySocket: WebSocket) {
       case EventType.NEW_ROUND:
         let newRound = receivedEvent.payload as NewRound;
         console.log('NewRound event!', newRound.role, newRound.word);
-        game.update(g => {g.word = newRound.word; g.player.guesser = newRound.role === "guesser"; return g;});
+        game.update(g => {
+          g.word = newRound.word;
+          g.player.guesser = newRound.role === "guesser";
+          g.player.hintGiven = false;
+          return g;
+        });
         game.update(g => {g.otherPlayers = g.otherPlayers.map(player => {
             if (player.id === newRound.guesser) {
               player.guesser = true;

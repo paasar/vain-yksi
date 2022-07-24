@@ -10,6 +10,10 @@ class Game {
 
 export let game = writable(new Game());
 
+export class HintReceived {
+    client: string
+}
+
 export class NewGame {
    id: string
 }

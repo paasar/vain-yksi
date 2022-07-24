@@ -1,17 +1,22 @@
 <script lang="ts">
     import { game } from '../GameState';
+    import { sendHint } from '../WebSocket';
+
+    let hint;
 </script>
 
 <div>
 {#if $game.player && $game.player.guesser }
     Sinä arvaat! Odota vinkkejä.
-{:else}
+{:else if $game.player && !$game.player.hintGiven}
     <div>
     Anna vinkki sanalle: <div class="word-to-guess">{$game.word}</div>
     </div>
     <label for="hint">Vinkki</label>
-    <input id="hint" />
-    <button>Lähetä vinkki</button>
+    <input id="hint" bind:value={hint}/>
+    <button on:click={() => sendHint(hint)}>Lähetä vinkki</button>
+{:else}
+    Odotellaan muita.
 {/if}
 </div>
 
