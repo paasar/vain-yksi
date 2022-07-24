@@ -6,12 +6,34 @@ class Game {
   word?: string
   player?: PlayerData
   otherPlayers: PlayerData[] = []
+  hints: Hint[] = []
+  duplicateHints: Hint[] = []
 }
 
 export let game = writable(new Game());
 
+export class AllHints {
+    duplicates: Hint[]
+    hints: Hint[]
+}
+
+export class AllHintsToGuesser {
+    hints: Hint[]
+    usersWithDuplicates: PlayerId[]
+}
+
+export class Hint {
+    client: PlayerId
+    hint: string
+
+    constructor(client: PlayerId, hint: string) {
+        this.client = client;
+        this.hint = hint;
+    }
+}
+
 export class HintReceived {
-    client: string
+    client: PlayerId
 }
 
 export class NewGame {
@@ -27,27 +49,29 @@ export class NewRound {
 export type OtherPlayers = PlayerData[]
 
 export class PlayerJoin {
-  id: string
+  id: PlayerId
   username: string
 }
 
 export class PlayerQuit {
-  id: string
+  id: PlayerId
 }
   
 export class YourData {
-  id: string
+  id: PlayerId
   username: string
 }
 
 export class PlayerData {
-  id: string
+  id: PlayerId
   username: string
   hintGiven: boolean = false;
   guesser: boolean = false;
 
-  constructor(id: string, username: string) {
+  constructor(id: PlayerId, username: string) {
       this.id = id;
       this.username = username;
   }
 }
+
+export type PlayerId = string;

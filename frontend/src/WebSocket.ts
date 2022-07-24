@@ -1,13 +1,24 @@
-import { PlayerData, type HintReceived, type NewGame, type NewRound, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
+import {
+  Hint,
+  PlayerData,
+  type AllHints,
+  type AllHintsToGuesser,
+  type HintReceived,
+  type NewGame,
+  type NewRound,
+  type OtherPlayers,
+  type PlayerJoin,
+  type PlayerQuit,
+  type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
 
 // TODO EVENTS:
-// TODO hint received
-// TODO all hints received (guesser, hinter)
 // TODO result (correct, incorrect)
 enum EventType {
+  ALL_HINTS = "all_hints",
+  ALL_HINTS_TO_GUESSER = "all_hints_to_guesser",
   HINT_RECEIVED = "hint_received",
   NEW_GAME = "new_game",
   NEW_ROUND = "new_round",
@@ -19,7 +30,7 @@ enum EventType {
 
 interface Event {
   event: EventType
-  payload: HintReceived | NewGame | NewRound | OtherPlayers | PlayerJoin | YourData
+  payload: AllHints | AllHintsToGuesser | HintReceived | NewGame | NewRound | OtherPlayers | PlayerJoin | YourData
 }
 
 export function createGame(username: string) {
@@ -56,6 +67,23 @@ function addSocketHandlers(mySocket: WebSocket) {
     let receivedEvent: Event = JSON.parse(event.data);
 
     switch (receivedEvent.event) {
+      case EventType.ALL_HINTS:
+        let allHints = receivedEvent.payload as AllHints;
+        game.update(g => {
+          g.hints = allHints.hints;
+          g.duplicateHints = allHints.duplicates;
+          return g;
+        });
+        break;
+      case EventType.ALL_HINTS_TO_GUESSER:
+        let allHintsToGuesser = receivedEvent.payload as AllHintsToGuesser;
+        game.update(g => {
+          g.hints = allHintsToGuesser.hints;
+          g.duplicateHints = allHintsToGuesser.usersWithDuplicates
+            .map(dup => new Hint(dup, ''));
+          return g;
+        });
+        break;
       case EventType.HINT_RECEIVED:
         let hintReceived = receivedEvent.payload as HintReceived;
         game.update(g => {g.otherPlayers = g.otherPlayers.map(player => {
