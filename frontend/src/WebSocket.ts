@@ -1,4 +1,4 @@
-import { PlayerData, type NewGame, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
+import { PlayerData, type NewGame, type OtherPlayers, type PlayerJoin, type PlayerQuit, type YourData } from './GameState';
 import { game } from './GameState';
 
 let socket: WebSocket;
@@ -10,6 +10,7 @@ let socket: WebSocket;
 // TODO result (correct, incorrect)
 enum EventType {
   NEW_GAME = "new_game",
+  OTHER_PLAYERS = "other_players",
   PLAYER_JOIN = "join",
   PLAYER_QUIT = "quit",
   YOUR_DATA = "your_data",
@@ -17,7 +18,7 @@ enum EventType {
 
 interface Event {
   event: EventType
-  payload: NewGame | PlayerJoin | YourData
+  payload: NewGame | OtherPlayers | PlayerJoin | YourData
 }
 
 export function createGame(username: string) {
@@ -48,16 +49,21 @@ function addSocketHandlers(mySocket: WebSocket) {
         console.log('NewGame event!', newGame.id);
         game.update(g => {g.id = newGame.id; return g;});
         break;
+      case EventType.OTHER_PLAYERS:
+        let otherPlayers = receivedEvent.payload as OtherPlayers;
+        console.log('Other players', otherPlayers);
+        game.update(g => {g.otherPlayers = otherPlayers; return g;})
+        break;
       case EventType.PLAYER_JOIN:
         let playerJoin = receivedEvent.payload as PlayerJoin;
-        console.log('Join event!', playerJoin.id, playerJoin.name);
-        let otherPlayerData = new PlayerData(playerJoin.id, playerJoin.name);
-        game.update(g => {g.allPlayers.push(otherPlayerData); return g;});
+        console.log('Join event!', playerJoin.id, playerJoin.username);
+        let otherPlayerData = new PlayerData(playerJoin.id, playerJoin.username);
+        game.update(g => {g.otherPlayers.push(otherPlayerData); return g;});
         break;
       case EventType.PLAYER_QUIT:
         let playerQuit = receivedEvent.payload as PlayerQuit;
         console.log('Quit event!', playerQuit.id);
-        game.update(g => {g.allPlayers = g.allPlayers.filter(p => p.id !== playerQuit.id); return g;});
+        game.update(g => {g.otherPlayers = g.otherPlayers.filter(p => p.id !== playerQuit.id); return g;});
         break;
       case EventType.YOUR_DATA:
         let yourData = receivedEvent.payload as YourData;

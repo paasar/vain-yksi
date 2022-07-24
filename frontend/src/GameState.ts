@@ -4,7 +4,7 @@ class Game {
   id?: string
   word?: string
   player?: PlayerData
-  allPlayers: PlayerData[] = []
+  otherPlayers: PlayerData[] = []
 }
 
 export let game = writable(new Game());
@@ -12,10 +12,12 @@ export let game = writable(new Game());
 export class NewGame {
    id: string
 }
-  
+
+export type OtherPlayers = PlayerData[]
+
 export class PlayerJoin {
   id: string
-  name: string
+  username: string
 }
 
 export class PlayerQuit {

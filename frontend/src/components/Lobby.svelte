@@ -14,7 +14,7 @@
 <div>
     <h2>Liittyneet pelaajat</h2>
 <ul>
-{#each $game.allPlayers as player}
+{#each $game.otherPlayers as player}
     <li>{player.username} ({player.id})</li>
 {/each}
 </ul>
