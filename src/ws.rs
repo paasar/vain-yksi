@@ -337,7 +337,8 @@ async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
                     "event": "new_round",
                     "payload": {
                         "role": "hinter",
-                        "word": word
+                        "word": word,
+                        "guesser": guesser.client_id
                     }
                 });
                 for hinter in hinters {

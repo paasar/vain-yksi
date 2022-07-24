@@ -278,7 +278,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -356,7 +357,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -500,7 +502,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -661,7 +664,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -808,7 +812,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -828,9 +833,15 @@ mod tests {
 
         host_client.send(Message::text(start_next_round_msg.to_string())).await;
 
-        expect_received(&mut host_client, &*new_round_hinter_msg.to_string()).await;
+        let new_round_hinter2_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana",
+                        "guesser": "user2_id"}
+        });
+        expect_received(&mut host_client, &*new_round_hinter2_msg.to_string()).await;
         expect_received(&mut second_client, &*new_round_guesser_msg.to_string()).await;
-        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter2_msg.to_string()).await;
     }
 
     // Case #8
@@ -867,7 +878,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
 
@@ -893,7 +905,8 @@ mod tests {
         let new_round_hinter_with_new_word_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "sanatesti"}
+                        "word": "sanatesti",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_with_new_word_msg.to_string()).await;
     }
