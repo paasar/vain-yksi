@@ -3,8 +3,6 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use warp::{Filter, Rejection, Reply, ws::Message};
 
-use ws::ClientIdAndName;
-
 mod handlers;
 mod ws;
 mod words;
@@ -99,6 +97,7 @@ mod tests {
     use serde_json::json;
     use tokio::time::timeout;
     use warp::test::WsClient;
+    use crate::ws::ClientIdAndName;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
