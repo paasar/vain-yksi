@@ -54,6 +54,12 @@ struct ClientAndHint {
     hint: String,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub(crate) struct ClientIdAndName {
+    pub id: String,
+    pub username: String,
+}
+
 pub async fn new_game(username: String, ws: WebSocket, games: Games) {
     println!("Creating game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
@@ -90,6 +96,19 @@ fn user_data_message(client_id: &str, username: &str) -> String {
                     "payload": {"id": client_id,
                                 "username": username}
                 }).to_string();
+}
+
+fn other_clients_message(clients: &Vec<Client>) -> String {
+    let other_players = clients.clone().into_iter()
+        .map(|client| ClientIdAndName {
+            id: client.client_id,
+            username: client.username,
+        })
+        .collect::<Vec<_>>();
+    return json!({
+            "event": "other_players",
+            "payload": other_players
+        }).to_string();
 }
 
 pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: String) {
@@ -171,11 +190,17 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
                     "event": "join",
                     "payload": {
                         "id": client.client_id,
-                        "name": client.username
+                        "username": client.username
                     }
                 });
+                // Notify others of a new player
                 for (_, client_to_notify) in &game.clients {
                     send_message(client_to_notify, &*join_message.to_string()).await;
+                }
+
+                // Notify new player of others already joined
+                if &game.clients.len() > &0usize {
+                    send_message(&client, &*other_clients_message(&game.game_state.client_turns)).await;
                 }
 
                 let clients = &mut game.clients;

@@ -3,6 +3,8 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use warp::{Filter, Rejection, Reply, ws::Message};
 
+use ws::ClientIdAndName;
+
 mod handlers;
 mod ws;
 mod words;
@@ -116,6 +118,19 @@ mod tests {
         }).to_string();
     }
 
+    fn other_players_msg(usernames: Vec<&str>) -> String {
+        let other_players = usernames.into_iter()
+            .map(|username| ClientIdAndName {
+                id: format!("{}_id", username),
+                username: String::from(username),
+            })
+            .collect::<Vec<_>>();
+        return json!({
+            "event": "other_players",
+            "payload": other_players
+        }).to_string();
+    }
+
     async fn assert_message(client: &mut WsClient, expected_message: &str) {
         let msg = client.recv().await.expect("recv");
         assert_eq!(msg.to_str(), Ok(expected_message));
@@ -186,10 +201,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -197,11 +213,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         if let Ok(current_games) = games.try_lock() {
@@ -227,10 +244,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -238,11 +256,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         // ---- Setup done ----
@@ -291,10 +310,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -302,11 +322,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
@@ -314,12 +335,13 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*other_players_msg(vec!("user1", "user2", "user3"))).await;
         expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
@@ -432,10 +454,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -443,11 +466,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
@@ -455,12 +479,13 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*other_players_msg(vec!("user1", "user2", "user3"))).await;
         expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
@@ -590,10 +615,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -601,11 +627,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let mut fourth_client = join_game(&games, "1001", "user4").await;
@@ -613,12 +640,13 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user4_joined_msg.to_string()).await;
         expect_received(&mut third_client, &*user4_joined_msg.to_string()).await;
+        expect_received(&mut fourth_client, &*other_players_msg(vec!("user1", "user2", "user3"))).await;
         expect_received(&mut fourth_client, &*your_data_msg("user4")).await;
 
         let start_next_round_msg = json!({
@@ -748,10 +776,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -759,11 +788,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         let start_next_round_msg = json!({
@@ -818,10 +848,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let start_next_round_msg = json!({
@@ -882,10 +913,11 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
+        expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
         let mut third_client = join_game(&games, "1001", "user3").await;
@@ -893,11 +925,12 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
         expect_received(&mut second_client, &*user3_joined_msg.to_string()).await;
+        expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
         // ---- Setup done ----
