@@ -186,7 +186,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -197,7 +197,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -227,7 +227,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -238,7 +238,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -291,7 +291,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -302,7 +302,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -314,7 +314,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
@@ -432,7 +432,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -443,7 +443,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -455,7 +455,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
@@ -590,7 +590,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -601,7 +601,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -613,7 +613,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user4_id",
-                "name": "user4"
+                "username": "user4"
             }
         });
         expect_received(&mut host_client, &*user4_joined_msg.to_string()).await;
@@ -748,7 +748,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -759,7 +759,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;
@@ -818,7 +818,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -882,7 +882,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user2_id",
-                "name": "user2"
+                "username": "user2"
             }
         });
         expect_received(&mut host_client, &*user2_joined_msg.to_string()).await;
@@ -893,7 +893,7 @@ mod tests {
             "event": "join",
             "payload": {
                 "id": "user3_id",
-                "name": "user3"
+                "username": "user3"
             }
         });
         expect_received(&mut host_client, &*user3_joined_msg.to_string()).await;

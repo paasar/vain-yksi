@@ -171,7 +171,7 @@ async fn add_client_to_game(client_id: String, client: Client, games: &Games, ga
                     "event": "join",
                     "payload": {
                         "id": client.client_id,
-                        "name": client.username
+                        "username": client.username
                     }
                 });
                 for (_, client_to_notify) in &game.clients {
