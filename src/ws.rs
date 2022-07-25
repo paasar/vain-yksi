@@ -499,7 +499,7 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
-                let result = if Some(guess) == game.game_state.word_to_guess {
+                let result = if Some(guess.clone()) == game.game_state.word_to_guess {
                     "correct"
                 } else {
                     "incorrect"
@@ -508,7 +508,8 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
                 let guess_result_message = json!({
                         "event": "guess_result",
                         "payload": {"result": result,
-                                    "word": game.game_state.word_to_guess
+                                    "word": game.game_state.word_to_guess,
+                                    "guess": guess
                        }
                     });
 

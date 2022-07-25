@@ -593,7 +593,8 @@ mod tests {
         let correct_result_msg = json!({
             "event": "guess_result",
             "payload": {"result": "correct",
-                         "word": "testisana"
+                         "word": "testisana",
+                         "guess": "testisana"
                        }
         });
 
@@ -755,7 +756,8 @@ mod tests {
         let incorrect_result_msg = json!({
             "event": "guess_result",
             "payload": { "result": "incorrect",
-                         "word": "testisana"
+                         "word": "testisana",
+                         "guess": "wrong"
                        }
         });
 
