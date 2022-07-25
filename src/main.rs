@@ -820,10 +820,21 @@ mod tests {
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
 
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+
         if let Ok(current_games) = games.try_lock() {
             let game = current_games.live_games.get("1001").unwrap();
             match game.clone().game_state.word_to_guess {
-                //TODO Assert that all hints are None
                 Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
                 None => assert!(false, "No word to guess in state.")
             }
@@ -844,6 +855,16 @@ mod tests {
         expect_received(&mut host_client, &*new_round_hinter2_msg.to_string()).await;
         expect_received(&mut second_client, &*new_round_guesser_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter2_msg.to_string()).await;
+
+        // Assert that all hints have been reset
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            for (_, client) in game.clone().clients {
+                assert_eq!(None, client.hint)
+            }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.")
+        };
     }
 
     // Case #8

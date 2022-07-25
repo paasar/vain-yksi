@@ -14,7 +14,7 @@
     </div>
     <label for="hint">Vinkki</label>
     <input id="hint" bind:value={hint}/>
-    <button on:click={() => sendHint(hint)}>Lähetä vinkki</button>
+    <button on:click={() => sendHint(hint)} disabled={!hint}>Lähetä vinkki</button>
 {:else}
     Odotellaan muita.
 {/if}

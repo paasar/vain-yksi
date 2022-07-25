@@ -347,7 +347,11 @@ async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
 
                 game_state.client_turns.push(guesser.clone());
 
-                //TODO clear old hints
+                // clear old hints
+                let clients = &mut game.clients;
+                for (_, client) in clients {
+                    client.hint = None;
+                }
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
