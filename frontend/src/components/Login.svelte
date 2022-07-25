@@ -8,14 +8,14 @@
     <label for="username">Nimi</label>
     <input id="username" type="text" maxlength="30" bind:value={username} />
     <div>
-        <button on:click={() => createGame(username)}>Luo uusi peli</button>
+        <button on:click={() => createGame(username)} disabled={!username}>Luo uusi peli</button>
     </div>
 </div>
 <div>
     <label for="gameIdToJoin">Pelikoodi</label>
     <input id="gameIdToJoin" type="number" minlength="4" maxlength="4" min="1001" max="9999" bind:value={gameIdToJoin} />
     <div>
-        <button on:click={() => joinGame(gameIdToJoin, username)}>Liity peliin</button>
+        <button on:click={() => joinGame(gameIdToJoin, username)} disabled={!username || !gameIdToJoin}>Liity peliin</button>
     </div>
 </div>
 

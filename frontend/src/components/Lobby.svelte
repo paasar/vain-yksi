@@ -10,7 +10,7 @@
     {/if}
 </div>
 
-<button on:click={() => startNextRound()}>Aloita peli</button>
+<button on:click={() => startNextRound()} disabled={$game.otherPlayers.length < 1}>Aloita peli</button>
 
 <div>
     <h2>Liittyneet pelaajat</h2>
