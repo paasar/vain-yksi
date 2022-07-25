@@ -2,6 +2,8 @@
 import { game, type PlayerId } from "../GameState";
 import { sendGuess, startNextRound } from '../WebSocket';
 
+import { fade } from 'svelte/transition';
+
 let guesser = $game.otherPlayers.filter(player => player.guesser).at(0);
 let guesserUsername = guesser ? guesser.username : '...';
 
@@ -38,23 +40,27 @@ function username(id: PlayerId) {
 {/if}
 
 {#if $game.result}
-    <div>Arvaus meni <span class="emphasis">{#if $game.result.correct}oikein{:else}väärin{/if}!</span></div>
+    <div in:fade="{{duration: 500, delay: 500}}">
+        <div>Arvaus meni <span class="emphasis">{#if $game.result.correct}oikein{:else}väärin{/if}!</span></div>
 
-    <div>Sana oli <span class="emphasis">{$game.result.word}</span>.</div>
-    {#if !$game.result.correct}
-        Arvaus oli <span class="emphasis">{$game.result.guess}</span>.
-    {/if}
+        <div>Sana oli <span class="emphasis">{$game.result.word}</span>.</div>
+        {#if !$game.result.correct}
+            Arvaus oli <span class="emphasis">{$game.result.guess}</span>.
+        {/if}
 
-    <div>
-        <button on:click={() => startNextRound()}>Aloita uusi kierros</button>
+        <div>
+            <button on:click={() => startNextRound()}>Aloita uusi kierros</button>
+        </div>
     </div>
 {:else}
+    <div out:fade="{{duration: 500}}">
     {#if $game.player.guesser}
         <input id="guess" bind:value={guess} />
         <button on:click={() => sendGuess(guess)} disabled={!guess}>Arvaa!</button>
     {:else}
         Odotetaan, että {guesserUsername} arvaa.
     {/if}
+</div>
 {/if}
 
 <style>
