@@ -74,6 +74,11 @@ export function sendGuess(guess: string) {
   socket.send(JSON.stringify({"action": {"guess": guess}}));
 }
 
+export function skipWord() {
+  console.log("Skip word");
+  socket.send(JSON.stringify({"action": {"skip_word": true}}));
+}
+
 function addSocketHandlers(mySocket: WebSocket) {
   mySocket.onopen = function(e) {
     console.log("[open] Connection established");

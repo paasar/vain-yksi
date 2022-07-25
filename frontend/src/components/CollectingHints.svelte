@@ -1,6 +1,6 @@
 <script lang="ts">
     import { game } from '../GameState';
-    import { sendHint } from '../WebSocket';
+    import { sendHint, skipWord, startNextRound } from '../WebSocket';
 
     let hint;
 </script>
@@ -36,6 +36,13 @@
     {/if}
     </div>
 {/each}
+</div>
+
+<div>
+    {#if $game.player && !$game.player.guesser }
+        <button on:click={() => skipWord()}>Vaihda sana</button>
+    {/if}
+    <button on:click={() => startNextRound()}>Vaihda arvaaja ja sana</button>
 </div>
 
 <style>
