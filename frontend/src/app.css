@@ -17,7 +17,6 @@
 
 * > * {
   margin-top: 1em;
-  margin-left: 1em;
 }
 
 a {
@@ -44,7 +43,7 @@ h1 {
 #app {
   max-width: 800px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0 2rem;
   text-align: center;
 }
 

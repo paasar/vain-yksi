@@ -12,7 +12,7 @@
 </script>
 
 <main>
-  <h1>Vain Yksi</h1>
+  <h1 class:started="{$game.id}">Vain Yksi</h1>
   <div class="game-info">
     {#if $game.hints.length > 0 || $game.duplicateHints.length > 0}
       <div out:fly="{flyOut}" in:fly="{flyIn}">
@@ -37,6 +37,10 @@
 <style>
   .game-info {
     font-weight: bold;
-    margin: 1rem;
+    margin-top: 40px;
+  }
+
+  .started {
+    font-size: 1.5em;
   }
 </style>
