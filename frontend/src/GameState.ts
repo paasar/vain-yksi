@@ -8,6 +8,7 @@ class Game {
   otherPlayers: PlayerData[] = []
   hints: Hint[] = []
   duplicateHints: Hint[] = []
+  result?: Result
 }
 
 export let game = writable(new Game());
@@ -20,6 +21,12 @@ export class AllHints {
 export class AllHintsToGuesser {
     hints: Hint[]
     usersWithDuplicates: PlayerId[]
+}
+
+export class GuessResult {
+    result: string
+    word: string
+    guess: string
 }
 
 export class Hint {
@@ -56,7 +63,19 @@ export class PlayerJoin {
 export class PlayerQuit {
   id: PlayerId
 }
-  
+
+export class Result {
+    guess: string
+    word: string
+    correct: boolean
+
+    constructor(resultPayload: GuessResult) {
+        this.guess = resultPayload.guess;
+        this.word = resultPayload.word;
+        this.correct = resultPayload.result === "correct";
+    }
+}
+
 export class YourData {
   id: PlayerId
   username: string
@@ -75,3 +94,12 @@ export class PlayerData {
 }
 
 export type PlayerId = string;
+
+export function resetStateForNextRound() {
+    game.update(g => {
+        g.duplicateHints = [];
+        g.hints = [];
+        g.result = null;
+        return g;
+    });
+}
