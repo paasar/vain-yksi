@@ -50,7 +50,7 @@ export class NewGame {
 export class NewRound {
     role: string
     word?: string
-    guesser?: string
+    guesser?: PlayerId
 }
 
 export type OtherPlayers = PlayerData[]

@@ -3,6 +3,7 @@ import { game, type PlayerId } from "../GameState";
 import { sendGuess, startNextRound } from '../WebSocket';
 
 let guesser = $game.otherPlayers.filter(player => player.guesser).at(0);
+let guesserUsername = guesser ? guesser.username : '...';
 
 let guess;
 
@@ -52,7 +53,7 @@ function username(id: PlayerId) {
         <input id="guess" bind:value={guess} />
         <button on:click={() => sendGuess(guess)} disabled={!guess}>Arvaa!</button>
     {:else}
-        Odotetaan, että {guesser.username} arvaa.
+        Odotetaan, että {guesserUsername} arvaa.
     {/if}
 {/if}
 
