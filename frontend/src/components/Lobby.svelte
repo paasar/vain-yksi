@@ -14,9 +14,9 @@
 
 <div>
     <h2>Liittyneet pelaajat</h2>
-<ul>
-{#each $game.otherPlayers as player}
-    <li>{player.username} ({player.id})</li>
-{/each}
-</ul>
+    {#each $game.otherPlayers as player}
+        <div>{player.username} ({player.id})</div>
+    {:else}
+        <div>Ei vielä muita pelaajia.</div>
+    {/each}
 </div>

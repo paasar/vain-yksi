@@ -18,32 +18,3 @@
     </div>
     <button on:click={() => joinGame(gameIdToJoin, username)} disabled={!username || !gameIdToJoin}>Liity peliin</button>
 </div>
-
-<style>
-    .row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-    }
-
-    button {
-        height: 3em;
-        margin-left: 1em;
-        min-width: 200px;
-    }
-
-    label {
-        display: block;
-        text-align: left;
-    }
-
-    input {
-        border: solid #bbb 1px;
-        border-radius: 5px;
-        display: block;
-        font-size: 1.1em;
-        margin-top: 5px;
-        min-width: 200px;
-        padding: 5px;
-    }
-</style>

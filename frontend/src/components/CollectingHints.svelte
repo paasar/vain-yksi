@@ -12,9 +12,13 @@
     <div>
     Anna vinkki sanalle: <div class="word-to-guess">{$game.word}</div>
     </div>
-    <label for="hint">Vinkki</label>
-    <input id="hint" bind:value={hint}/>
-    <button on:click={() => sendHint(hint)} disabled={!hint}>Lähetä vinkki</button>
+    <div class="row">
+        <div>
+            <label for="hint">Vinkki</label>
+            <input id="hint" bind:value={hint}/>
+        </div>
+        <button on:click={() => sendHint(hint)} disabled={!hint}>Lähetä vinkki</button>
+    </div>
 {:else}
     Odotellaan muita.
 {/if}
