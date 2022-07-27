@@ -39,6 +39,8 @@
         {/if}
     {/if}
     </div>
+{:else}
+    <div>Ei muita pelaajia.</div>
 {/each}
 </div>
 

@@ -4,9 +4,11 @@
   line-height: 24px;
   font-weight: 400;
 
+  --main: rgba(196, 148, 16, 0.9);
+  --main-complement: #63288F;
   color-scheme: light dark;
-  color: rgba(196, 148, 16, 0.9);
-  background-color: #63288F;
+  color: var(--main);
+  background-color: var(--main-complement);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -54,14 +56,13 @@ h1 {
 }
 
 button {
-  background-color: #A77E0E;
+  background-color: var(--main);
   border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
   font-size: 1.1em;
   font-weight: 500;
   font-family: inherit;
-  margin-left: 1em;
   min-width: 130px;
   padding: 0.3em 1em;
   transition: border-color 0.25s;
@@ -96,14 +97,14 @@ button:disabled {
 
 @media (prefers-color-scheme: light) {
   :root {
-    color: #63288F;
-    background-color: #EABC19;
+    --main: #63288F;
+    --main-complement: rgba(196, 148, 16, 0.9);
   }
   a:hover {
     color: #747bff;
   }
   button {
-    background-color: #63288F;
+    background-color: var(--main);
     color: #dddddd;
   }
 }

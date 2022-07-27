@@ -15,10 +15,9 @@ import {
   resetStateForNextRound } from './GameState';
 import { game } from './GameState';
 
+let domain = window.location.hostname;
 let socket: WebSocket;
 
-// TODO EVENTS:
-// TODO result (correct, incorrect)
 enum EventType {
   ALL_HINTS = "all_hints",
   ALL_HINTS_TO_GUESSER = "all_hints_to_guesser",
@@ -46,13 +45,14 @@ interface Event {
 }
 
 export function createGame(username: string) {
-  socket = new WebSocket(`ws://localhost:8000/ws/new/${username}`);
+  // TODO port in dev vs. prod?
+  socket = new WebSocket(`ws://${domain}:8000/ws/new/${username}`);
 
   addSocketHandlers(socket);
 };
 
 export function joinGame(gameIdToJoin: string, username: string) {
-  socket = new WebSocket(`ws://localhost:8000/ws/join/${gameIdToJoin}/${username}`);
+  socket = new WebSocket(`ws://${domain}:8000/ws/join/${gameIdToJoin}/${username}`);
 
   game.update(g => {g.id = gameIdToJoin; return g;});
   addSocketHandlers(socket);

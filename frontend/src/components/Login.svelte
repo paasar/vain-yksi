@@ -13,8 +13,14 @@
 </div>
 <div class="row">
     <div>
-        <label for="gameIdToJoin">Pelikoodi</label>
+        <label for="gameIdToJoin">Pelin tunnus</label>
         <input id="gameIdToJoin" type="number" minlength="4" maxlength="4" min="1001" max="9999" bind:value={gameIdToJoin} />
     </div>
     <button on:click={() => joinGame(gameIdToJoin, username)} disabled={!username || !gameIdToJoin}>Liity peliin</button>
 </div>
+
+<style>
+    button {
+        margin-left: 1em;
+    }
+</style>
