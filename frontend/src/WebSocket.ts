@@ -46,6 +46,7 @@ interface Event {
 
 export function createGame(username: string) {
   // TODO port in dev vs. prod?
+  // TODO wss instead of ws in prod?
   socket = new WebSocket(`ws://${domain}:8000/ws/new/${username}`);
 
   addSocketHandlers(socket);

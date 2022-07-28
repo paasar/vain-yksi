@@ -47,10 +47,15 @@ async fn main() {
     };
     let games: Games = Arc::new(Mutex::new(game_container));
 
+    let static_files = warp::path::end()
+        .and(warp::fs::dir("./static/"))
+        .or(warp::path("assets").and(warp::fs::dir("./static/assets/")));
+
     println!("Configuring websocket routes");
     let routes =
         new_route(&games)
             .or(join_route(&games))
+            .or(static_files)
             .with(warp::cors().allow_any_origin());
 
     println!("Starting server");
