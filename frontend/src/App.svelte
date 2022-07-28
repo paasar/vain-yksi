@@ -39,6 +39,7 @@
 <style>
   .content {
     margin: 0 auto;
+    min-width: 350px;
   }
 
   .game-info {

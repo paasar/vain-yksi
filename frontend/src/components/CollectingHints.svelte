@@ -27,17 +27,21 @@
 <h2>Muut</h2>
 <div>
 {#each $game.otherPlayers as player}
-    <div>
-    {player.username}
-    {#if player.guesser}
-        arvaamisvuorossa
-    {:else}
-        {#if player.hintGiven}
-            Vinkki annettu
-        {:else}
-            Odotellaan vinkkiä
-        {/if}
-    {/if}
+    <div class="player-state-card">
+        <div class="state">
+            {#if player.guesser}
+                ARVAA
+            {:else}
+                {#if player.hintGiven}
+                    VALMIS
+                {:else}
+                    Vinkkaa
+                {/if}
+            {/if}
+        </div>
+        <div class="username">
+            {player.username}
+        </div>
     </div>
 {:else}
     <div>Ei muita pelaajia.</div>
@@ -62,6 +66,29 @@
     button {
         margin-left: 0.5em;
         margin-top: 0.5em;
+    }
+
+    .player-state-card {
+        background-color: var(--light-gray);
+        border: solid 2px var(--main);
+        border-radius: 10px;
+        color: var(--lila);
+        display: flex;
+        margin: 0.5em 0;
+    }
+
+    .state, .username {
+        display: inline-block;
+        padding: 0.5em;
+    }
+
+    .state {
+        width: 60px;
+        border-right: solid 1px var(--main);
+    }
+
+    .username {
+        flex-grow: 1;
     }
 
     .footer {
