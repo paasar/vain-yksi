@@ -11,3 +11,5 @@ The frontend for the game called Vain Yksi.
 # Deployment
 
     npm build
+
+Copy `dist/*` to `../static/`.
