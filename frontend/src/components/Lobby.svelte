@@ -44,6 +44,10 @@
         padding: 0.4em;
     }
 
+    button {
+        margin-top: 1rem;
+    }
+
     .player-card {
         background-color: var(--main);
         border-radius: 1em;
@@ -52,6 +56,7 @@
         -moz-box-shadow: 4px 4px 5px 0px rgba(0,0,0,0.7) inset;
         color: var(--main-complement);
         font-size: 1.3em;
+        margin-top: 0.5em;
         padding: 0.5em;
     }
 </style>

@@ -44,16 +44,39 @@
 {/each}
 </div>
 
-<div>
-    {#if $game.player && !$game.player.guesser }
+<div class="footer">
+    <div class="footer-content">
+        {#if $game.player && !$game.player.guesser }
         <button on:click={() => skipWord()}>Vaihda sana</button>
-    {/if}
-    <button on:click={() => startNextRound()}>Vaihda arvaaja ja sana</button>
+        {/if}
+        <button on:click={() => startNextRound()}>Vaihda arvaaja ja sana</button>
+    </div>
 </div>
 
 <style>
     .word-to-guess {
         font-size: larger;
         font-weight: 700;
+    }
+
+    button {
+        margin-left: 0.5em;
+        margin-top: 0.5em;
+    }
+
+    .footer {
+        border-top: solid 1px var(--main);
+        margin-top: 100px;
+        padding: 0 2rem;
+        width: calc(100% - 2.5rem);
+    }
+
+    .footer-content {
+        display: flex;
+        justify-content: space-evenly;
+        align-items: center;
+        margin: 0 auto;
+        max-width: 800px;
+        padding: 0.5em 0;
     }
 </style>
