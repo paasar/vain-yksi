@@ -602,6 +602,8 @@ mod tests {
         expect_received(&mut second_client, &*correct_result_msg.to_string()).await;
         expect_received(&mut third_client, &*correct_result_msg.to_string()).await;
         expect_received(&mut fourth_client, &*correct_result_msg.to_string()).await;
+
+        expect_received(&mut host_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
     // Case #6.2
@@ -765,6 +767,8 @@ mod tests {
         expect_received(&mut second_client, &*incorrect_result_msg.to_string()).await;
         expect_received(&mut third_client, &*incorrect_result_msg.to_string()).await;
         expect_received(&mut fourth_client, &*incorrect_result_msg.to_string()).await;
+
+        expect_received(&mut host_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
     // Case #7

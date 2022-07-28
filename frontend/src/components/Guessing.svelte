@@ -24,7 +24,7 @@ function username(id: PlayerId) {
 {#if $game.duplicateHints.length > 0}
     <h2>Duplikaatit vinkit</h2>
     {#each $game.duplicateHints as hint}
-        {#if !$game.player.guesser}
+        {#if (!$game.player.guesser || $game.result) && hint.hint}
             <div class="hint-card duplicate">
                 <div class="username">
                     {username(hint.client)}
