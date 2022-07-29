@@ -22,5 +22,6 @@
 <style>
     button {
         margin-left: 1em;
+        margin-top: 0.5em;
     }
 </style>
