@@ -16,6 +16,19 @@ import {
 import { game } from './GameState';
 
 let domain = window.location.hostname;
+let port = ':8000';
+if (domain !== 'localhost' && domain !== '127.0.0.1' ) {
+  port = '';
+}
+let protocol = window.location.protocol;
+let wsProtocol = 'ws';
+if (protocol === 'https:') {
+  wsProtocol = 'wss';
+}
+
+// Expect the backend to respond from the same path for WebSocket connections.
+let loadPath = window.location.pathname;
+
 let socket: WebSocket;
 
 enum EventType {
@@ -45,15 +58,13 @@ interface Event {
 }
 
 export function createGame(username: string) {
-  // TODO port in dev vs. prod?
-  // TODO wss instead of ws in prod?
-  socket = new WebSocket(`ws://${domain}:8000/ws/new/${username}`);
+  socket = new WebSocket(`${wsProtocol}://${domain}${port}${loadPath}ws/new/${username}`);
 
   addSocketHandlers(socket);
 };
 
 export function joinGame(gameIdToJoin: string, username: string) {
-  socket = new WebSocket(`ws://${domain}:8000/ws/join/${gameIdToJoin}/${username}`);
+  socket = new WebSocket(`${wsProtocol}://${domain}${port}${loadPath}ws/join/${gameIdToJoin}/${username}`);
 
   game.update(g => {g.id = gameIdToJoin; return g;});
   addSocketHandlers(socket);
