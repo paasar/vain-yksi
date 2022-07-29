@@ -185,10 +185,10 @@ mod tests {
     async fn new_game_creator_is_sent_the_game_id() {
         let games = create_empty_games_state().await;
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user%201%C3%A4").await;
 
         expect_received(&mut host_client, &*new_game_msg()).await;
-        expect_received(&mut host_client, &*your_data_msg("user1")).await;
+        expect_received(&mut host_client, &*your_data_msg("user 1ä")).await;
     }
 
     // Case #2
