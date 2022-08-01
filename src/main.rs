@@ -3,8 +3,6 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use warp::{Filter, Rejection, Reply, ws::Message};
 
-use ws::ClientIdAndName;
-
 mod handlers;
 mod ws;
 mod words;
@@ -49,10 +47,15 @@ async fn main() {
     };
     let games: Games = Arc::new(Mutex::new(game_container));
 
+    let static_files = warp::path::end()
+        .and(warp::fs::dir("./static/"))
+        .or(warp::path("assets").and(warp::fs::dir("./static/assets/")));
+
     println!("Configuring websocket routes");
     let routes =
         new_route(&games)
             .or(join_route(&games))
+            .or(static_files)
             .with(warp::cors().allow_any_origin());
 
     println!("Starting server");
@@ -99,6 +102,7 @@ mod tests {
     use serde_json::json;
     use tokio::time::timeout;
     use warp::test::WsClient;
+    use crate::ws::ClientIdAndName;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -181,10 +185,10 @@ mod tests {
     async fn new_game_creator_is_sent_the_game_id() {
         let games = create_empty_games_state().await;
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user%201%C3%A4").await;
 
         expect_received(&mut host_client, &*new_game_msg()).await;
-        expect_received(&mut host_client, &*your_data_msg("user1")).await;
+        expect_received(&mut host_client, &*your_data_msg("user 1ä")).await;
     }
 
     // Case #2
@@ -279,7 +283,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -357,7 +362,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -501,7 +507,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -591,7 +598,8 @@ mod tests {
         let correct_result_msg = json!({
             "event": "guess_result",
             "payload": {"result": "correct",
-                         "word": "testisana"
+                         "word": "testisana",
+                         "guess": "testisana"
                        }
         });
 
@@ -599,6 +607,8 @@ mod tests {
         expect_received(&mut second_client, &*correct_result_msg.to_string()).await;
         expect_received(&mut third_client, &*correct_result_msg.to_string()).await;
         expect_received(&mut fourth_client, &*correct_result_msg.to_string()).await;
+
+        expect_received(&mut host_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
     // Case #6.2
@@ -662,7 +672,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
@@ -752,7 +763,8 @@ mod tests {
         let incorrect_result_msg = json!({
             "event": "guess_result",
             "payload": { "result": "incorrect",
-                         "word": "testisana"
+                         "word": "testisana",
+                         "guess": "wrong"
                        }
         });
 
@@ -760,6 +772,8 @@ mod tests {
         expect_received(&mut second_client, &*incorrect_result_msg.to_string()).await;
         expect_received(&mut third_client, &*incorrect_result_msg.to_string()).await;
         expect_received(&mut fourth_client, &*incorrect_result_msg.to_string()).await;
+
+        expect_received(&mut host_client, &*hints_to_hinters_msg.to_string()).await;
     }
 
     // Case #7
@@ -809,15 +823,27 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
         expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
 
+        let hint3_msg = json!({
+            "action": {"hint": "vinkki3"}
+        });
+        third_client.send(Message::text(hint3_msg.to_string())).await;
+
+        let hint_received_from3_msg = json!({
+            "event": "hint_received",
+            "payload": {"client": "user3_id"}
+        });
+        expect_received(&mut host_client, &*hint_received_from3_msg.to_string()).await;
+        expect_received(&mut second_client, &*hint_received_from3_msg.to_string()).await;
+
         if let Ok(current_games) = games.try_lock() {
             let game = current_games.live_games.get("1001").unwrap();
             match game.clone().game_state.word_to_guess {
-                //TODO Assert that all hints are None
                 Some(word_to_guess) => assert_eq!("testisana", word_to_guess),
                 None => assert!(false, "No word to guess in state.")
             }
@@ -829,9 +855,25 @@ mod tests {
 
         host_client.send(Message::text(start_next_round_msg.to_string())).await;
 
-        expect_received(&mut host_client, &*new_round_hinter_msg.to_string()).await;
+        let new_round_hinter2_msg = json!({
+            "event": "new_round",
+            "payload": {"role": "hinter",
+                        "word": "testisana",
+                        "guesser": "user2_id"}
+        });
+        expect_received(&mut host_client, &*new_round_hinter2_msg.to_string()).await;
         expect_received(&mut second_client, &*new_round_guesser_msg.to_string()).await;
-        expect_received(&mut third_client, &*new_round_hinter_msg.to_string()).await;
+        expect_received(&mut third_client, &*new_round_hinter2_msg.to_string()).await;
+
+        // Assert that all hints have been reset
+        if let Ok(current_games) = games.try_lock() {
+            let game = current_games.live_games.get("1001").unwrap();
+            for (_, client) in game.clone().clients {
+                assert_eq!(None, client.hint)
+            }
+        } else {
+            assert!(false, "Cloud not get lock to assert game state.")
+        };
     }
 
     // Case #8
@@ -868,7 +910,8 @@ mod tests {
         let new_round_hinter_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "testisana"}
+                        "word": "testisana",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_msg.to_string()).await;
 
@@ -894,7 +937,8 @@ mod tests {
         let new_round_hinter_with_new_word_msg = json!({
             "event": "new_round",
             "payload": {"role": "hinter",
-                        "word": "sanatesti"}
+                        "word": "sanatesti",
+                        "guesser": "user1_id"}
         });
         expect_received(&mut second_client, &*new_round_hinter_with_new_word_msg.to_string()).await;
     }

@@ -337,7 +337,8 @@ async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
                     "event": "new_round",
                     "payload": {
                         "role": "hinter",
-                        "word": word
+                        "word": word,
+                        "guesser": guesser.client_id
                     }
                 });
                 for hinter in hinters {
@@ -346,7 +347,11 @@ async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
 
                 game_state.client_turns.push(guesser.clone());
 
-                //TODO clear old hints
+                // clear old hints
+                let clients = &mut game.clients;
+                for (_, client) in clients {
+                    client.hint = None;
+                }
             }
             None => return // TODO Oh, no! Game not found! Return error?
         }
@@ -390,17 +395,8 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
                 if is_all_hints_given(&game.clients) {
                     println!("All hints given!");
 
-                    let grouped_by_hint = group_by_hint(game.clients.clone());
-
-                    let unique_hinters: Vec<Client> = filter_unique_hinters(&grouped_by_hint);
-                    let unique_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(unique_hinters);
-
-                    let duplicate_hinters: Vec<Client> = filter_duplicate_hinters(&grouped_by_hint);
-                    let duplicate_hinter_ids = duplicate_hinters.iter()
-                        .map(|client| client.client_id.clone())
-                        .sorted()
-                        .collect::<Vec<_>>();
-                    let duplicate_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(duplicate_hinters);
+                    let (unique_hinter_clients, duplicate_hinter_clients, duplicate_hinter_ids) =
+                        uniques_and_duplicates(game.clients.clone());
 
                     if let Some((guesser, hinters)) = game.game_state.client_turns.split_last() {
                         // To guesser
@@ -438,6 +434,22 @@ async fn add_hint(client_id: &str, hint: &str, game_id: &str, games: &Games) {
 
 fn is_all_hints_given(clients: &HashMap<String, Client>) -> bool {
     return clients.iter().filter(|(_, client)| client.hint != None).count() == clients.len() - 1;
+}
+
+fn uniques_and_duplicates(clients: HashMap<String, Client>) -> (Vec<ClientAndHint>, Vec<ClientAndHint>, Vec<String>) {
+    let grouped_by_hint = group_by_hint(clients);
+
+    let unique_hinters: Vec<Client> = filter_unique_hinters(&grouped_by_hint);
+    let unique_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(unique_hinters);
+
+    let duplicate_hinters: Vec<Client> = filter_duplicate_hinters(&grouped_by_hint);
+    let duplicate_hinter_ids = duplicate_hinters.iter()
+        .map(|client| client.client_id.clone())
+        .sorted()
+        .collect::<Vec<_>>();
+    let duplicate_hinter_clients: Vec<ClientAndHint> = as_client_and_hints(duplicate_hinters);
+
+    return (unique_hinter_clients, duplicate_hinter_clients, duplicate_hinter_ids);
 }
 
 fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Vec<Client>> {
@@ -498,7 +510,7 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
-                let result = if Some(guess) == game.game_state.word_to_guess {
+                let result = if Some(guess.clone()) == game.game_state.word_to_guess {
                     "correct"
                 } else {
                     "incorrect"
@@ -507,13 +519,28 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
                 let guess_result_message = json!({
                         "event": "guess_result",
                         "payload": {"result": result,
-                                    "word": game.game_state.word_to_guess
+                                    "word": game.game_state.word_to_guess,
+                                    "guess": guess
                        }
                     });
 
                 let clients = game.clients.clone().into_iter().map(|(_, client)| client).collect::<Vec<_>>();
                 for client in clients {
                     send_message(&client, &*guess_result_message.to_string()).await;
+
+                    if client.hint == None {
+                        let (unique_hinter_clients, duplicate_hinter_clients, _) =
+                            uniques_and_duplicates(game.clients.clone());
+
+                        let duplicates_to_guesser_message = json!({
+                            "event": "all_hints",
+                            "payload": {"duplicates": duplicate_hinter_clients,
+                                        "hints": unique_hinter_clients
+                                       }
+                        });
+
+                        send_message(&client, &*duplicates_to_guesser_message.to_string()).await;
+                    }
                 }
             }
             None => return // TODO Oh, no! Game not found! Return error?
