@@ -591,7 +591,7 @@ mod tests {
         // ---- Setup done ----
 
         let correct_guess_msg = json!({
-            "action": {"guess": "testisana"}
+            "action": {"guess": "Testisana"}
         });
         host_client.send(Message::text(correct_guess_msg.to_string())).await;
 
@@ -599,7 +599,7 @@ mod tests {
             "event": "guess_result",
             "payload": {"result": "correct",
                          "word": "testisana",
-                         "guess": "testisana"
+                         "guess": "Testisana"
                        }
         });
 
