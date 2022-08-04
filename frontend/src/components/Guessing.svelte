@@ -73,7 +73,9 @@ function username(id: PlayerId) {
     {#if $game.player.guesser}
         <div>
             <label for="guess">Arvaus</label>
-            <input id="guess" bind:value={guess} />
+            <input id="guess"
+                   bind:value={guess}
+                   on:keydown={(e) => {if (e.key === "Enter" && guess) sendGuess(guess)}} />
         </div>
         <button class="button-guess" on:click={() => sendGuess(guess)} disabled={!guess}>Arvaa!</button>
     {:else}

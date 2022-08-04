@@ -15,7 +15,8 @@
     <div class="row">
         <div>
             <label for="hint">Vinkki</label>
-            <input id="hint" bind:value={hint}/>
+            <input id="hint" bind:value={hint}
+                             on:keydown={(e) => {if (e.key === "Enter" && hint) sendHint(hint)}}/>
         </div>
         <button on:click={() => sendHint(hint)} disabled={!hint}>Lähetä vinkki</button>
     </div>
