@@ -457,7 +457,7 @@ fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Ve
         .into_iter()
         .map(|(_, client)| client)
         .filter(|client| client.hint != None)
-        .into_grouping_map_by(|client| client.hint.clone())
+        .into_grouping_map_by(|client| Some(client.hint.clone().unwrap().to_lowercase()))
         .collect::<Vec<_>>();
 }
 
@@ -510,7 +510,8 @@ async fn check_guess(guess: String, game_id: &str, games: &Games) {
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
             Some(game) => {
-                let result = if Some(guess.clone()) == game.game_state.word_to_guess {
+                let result = if guess.clone().to_lowercase() ==
+                                      game.game_state.word_to_guess.as_ref().unwrap().to_lowercase() {
                     "correct"
                 } else {
                     "incorrect"

@@ -408,7 +408,10 @@ mod tests {
         expect_received(&mut fourth_client, &*hint_received_from3_msg.to_string()).await;
 
         // Use same hint as user3 to cause a duplicate hint
-        fourth_client.send(Message::text(hint3_msg.to_string())).await;
+        let hint3_uppercase_msg = json!({
+            "action": {"hint": "Vinkki3"}
+        });
+        fourth_client.send(Message::text(hint3_uppercase_msg.to_string())).await;
 
         let hint_received_from4_msg = json!({
             "event": "hint_received",
@@ -434,7 +437,7 @@ mod tests {
                                         "hint": "vinkki3"
                                        },
                                        {"client": "user4_id",
-                                        "hint": "vinkki3"
+                                        "hint": "Vinkki3"
                                        }],
                         "hints": [{"client": "user2_id",
                                    "hint": "vinkki2"
@@ -591,7 +594,7 @@ mod tests {
         // ---- Setup done ----
 
         let correct_guess_msg = json!({
-            "action": {"guess": "testisana"}
+            "action": {"guess": "Testisana"}
         });
         host_client.send(Message::text(correct_guess_msg.to_string())).await;
 
@@ -599,7 +602,7 @@ mod tests {
             "event": "guess_result",
             "payload": {"result": "correct",
                          "word": "testisana",
-                         "guess": "testisana"
+                         "guess": "Testisana"
                        }
         });
 

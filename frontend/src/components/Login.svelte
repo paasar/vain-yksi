@@ -19,9 +19,23 @@
     <button on:click={() => joinGame(gameIdToJoin, username)} disabled={!username || !gameIdToJoin}>Liity peliin</button>
 </div>
 
+<div class="guide">
+    <h3>Ohjeet</h3>
+    <ul>
+        <li>Jokainen arvaa vuorollaan yhtä sanaa.</li>
+        <li>Muut antavat yhden sanan vinkin.</li>
+        <li>Jos vinkki on sama toisen kanssa, ne molemmat poistetaan.</li>
+    </ul>
+</div>
+
 <style>
     button {
         margin-left: 1em;
         margin-top: 0.5em;
+    }
+
+    .guide {
+        margin-top: 3em;
+        text-align: left;
     }
 </style>
