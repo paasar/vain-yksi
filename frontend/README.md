@@ -14,4 +14,6 @@ The frontend for the game called Vain Yksi.
 
 Copy `dist/*` to `../static/`.
 
+Delete old artifacts from `/static`.
+
 Change `js` and `css` references from `/assets...` to `./assets...`. # TODO automate this
