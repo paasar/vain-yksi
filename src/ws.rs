@@ -457,7 +457,7 @@ fn group_by_hint(clients: HashMap<String, Client>) -> HashMap<Option<String>, Ve
         .into_iter()
         .map(|(_, client)| client)
         .filter(|client| client.hint != None)
-        .into_grouping_map_by(|client| client.hint.clone())
+        .into_grouping_map_by(|client| Some(client.hint.clone().unwrap().to_lowercase()))
         .collect::<Vec<_>>();
 }
 
