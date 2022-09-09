@@ -52,9 +52,21 @@
 <div class="footer">
     <div class="footer-content">
         {#if $game.player && !$game.player.guesser }
-        <button on:click={() => skipWord()}>Vaihda sana</button>
+        <button on:click={() => {
+            if (!confirm("Haluatko varmasti vaihtaa sanan?")) {
+              return;
+            }
+            skipWord();
+          }
+        }>Vaihda sana</button>
         {/if}
-        <button on:click={() => startNextRound()}>Vaihda arvaaja ja sana</button>
+        <button on:click={() => {
+            if (!confirm("Haluatko varmasti vaihtaa arvaajan ja sanan?")) {
+              return;
+            }
+            startNextRound();
+          }
+        }>Vaihda arvaaja ja sana</button>
     </div>
 </div>
 
