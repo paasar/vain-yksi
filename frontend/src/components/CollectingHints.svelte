@@ -28,8 +28,11 @@
 <h2>Muut</h2>
 <div>
 {#each $game.otherPlayers as player}
-    <div class="player-state-card">
-        <div class="state">
+    <div class="player-state-card" class:guesser={player.guesser}>
+        <div class="username">
+            {player.username}
+        </div>
+        <div class="state" class:ready={player.hintGiven}>
             {#if player.guesser}
                 ARVAA
             {:else}
@@ -39,9 +42,6 @@
                     Vinkkaa
                 {/if}
             {/if}
-        </div>
-        <div class="username">
-            {player.username}
         </div>
     </div>
 {:else}
@@ -95,12 +95,23 @@
         padding: 0.5em;
     }
 
+    .guesser .state {
+        background-color: var(--main);
+        color: var(--main-complement);
+    }
+
     .state {
+        border-radius: 0 7px 7px 0;
         width: 60px;
-        border-right: solid 1px var(--main);
+    }
+
+    .state.ready {
+        background-color: var(--main);
+        color: var(--light-gray);
     }
 
     .username {
+        border-right: solid 1px var(--main);
         flex-grow: 1;
     }
 
