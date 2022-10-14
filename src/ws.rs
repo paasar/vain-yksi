@@ -151,10 +151,18 @@ fn create_new_game_id(games: &Games) -> String {
     };
 }
 
+#[cfg(not(test))]
+fn create_client_id(_username: String) -> String {
+    return Uuid::new_v4().to_simple().to_string();
+}
+
+#[cfg(test)]
+fn create_client_id(username: String) -> String {
+    return format!("{}_id", username);
+}
+
 fn create_client(username: String, client_sender: UnboundedSender<Result<Message, warp::Error>>) -> (String, Client) {
-    // TODO Until I learn to mock ID generator for unit tests, use simple predictable user IDs.
-    // let client_id = Uuid::new_v4().to_simple().to_string();
-    let client_id = format!("{}_id", username);
+    let client_id = create_client_id(username.clone());
     let new_client = Client {
         client_id: client_id.clone(),
         hint: None,
