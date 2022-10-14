@@ -270,35 +270,6 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
         Err(e) => {
             println!("Couldn't parse '{:?}' as ActionMessage.", e);
             println!("Games {:?}", games);
-            if let Ok(current_games) = games.try_lock() {
-                println!("Finding all connected to the game");
-                let _ =
-                    match current_games.live_games.get(game_id) {
-                        Some(game) => {
-                            println!("Game found.");
-                            for (current_client_id, client) in &game.clients {
-                                println!("Iterating client {}, for client {} message.", current_client_id, client.client_id);
-                                if current_client_id != client_id {
-                                    match &client.sender {
-                                        Some(sender) => {
-                                            println!("{} sending '{}' to {}", client_id, message, &client.client_id);
-                                            let _ = sender.send(Ok(Message::text(format!("{}", message))));
-                                        }
-                                        None => return
-                                    }
-                                } else {
-                                    println!("Same client. Not sending message.")
-                                }
-                            }
-                        }
-                        None => {
-                            println!("Game not found!");
-                            return;
-                        }
-                    };
-            } else {
-                println!("Failed to get lock on games.");
-            };
         }
     };
 
