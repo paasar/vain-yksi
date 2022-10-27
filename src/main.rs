@@ -3,6 +3,8 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use warp::{Filter, Rejection, Reply, ws::Message};
 
+use words::{RandomWordGenerator, WordGenerator};
+
 mod handlers;
 mod ws;
 mod words;
@@ -51,10 +53,12 @@ async fn main() {
         .and(warp::fs::dir("./static/"))
         .or(warp::path("assets").and(warp::fs::dir("./static/assets/")));
 
+    let word_generator: RandomWordGenerator = WordGenerator::new();
+
     println!("Configuring websocket routes");
     let routes =
-        new_route(&games)
-            .or(join_route(&games))
+        new_route(&games, word_generator)
+            .or(join_route(&games, word_generator))
             .or(static_files)
             .with(warp::cors().allow_any_origin());
 
@@ -66,7 +70,11 @@ fn with_games(games: Games) -> impl Filter<Extract=(Games, ), Error=Infallible> 
     warp::any().map(move || games.clone())
 }
 
-fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
+fn with_word_generator(word_generator: impl WordGenerator) -> impl Filter<Extract=(dyn WordGenerator, ), Error=Infallible> + Clone {
+    warp::any().map(move || word_generator.clone())
+}
+
+fn new_route(games: &Games, word_generator: impl WordGenerator) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/new/<username>
     let new_route = ws_route
@@ -75,12 +83,13 @@ fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> 
         .and(warp::path::end())
         .and(warp::ws())
         .and(with_games(games.clone()))
+        .and(with_word_generator(word_generator))
         .and_then(handlers::new_game_handler);
 
     new_route
 }
 
-fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
+fn join_route(games: &Games, word_generator: impl WordGenerator) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/join/<session_id>/<username>
     let join_route = ws_route
@@ -90,6 +99,7 @@ fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection>
         .and(warp::path::end())
         .and(warp::ws())
         .and(with_games(games.clone()))
+        .and(with_word_generator(word_generator))
         .and_then(handlers::join_game_handler);
 
     join_route
@@ -102,6 +112,7 @@ mod tests {
     use serde_json::json;
     use tokio::time::timeout;
     use warp::test::WsClient;
+
     use crate::ws::ClientIdAndName;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -161,7 +172,9 @@ mod tests {
     }
 
     async fn start_game(games: &Games, username: &str) -> WsClient {
-        let route = new_route(games);
+        // TODO non-random word generator for testing
+        let word_generator: RandomWordGenerator = WordGenerator::new();
+        let route = new_route(games, word_generator);
 
         return warp::test::ws()
             .path(&*format!("/ws/new/{}", username))
@@ -171,7 +184,9 @@ mod tests {
     }
 
     async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
-        let route = join_route(games);
+        // TODO non-random word generator for testing
+        let word_generator: RandomWordGenerator = WordGenerator::new();
+        let route = join_route(games, word_generator);
 
         return warp::test::ws()
             .path(&*format!("/ws/join/{}/{}", game_id, username))

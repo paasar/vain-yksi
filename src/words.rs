@@ -1,6 +1,11 @@
 use std::str;
 use rand::Rng;
 
+pub trait WordGenerator: Clone {
+    fn new() -> Self;
+    fn get_random_word(&self) -> String;
+}
+
 fn get_words() -> Vec<String> {
     let bytes = include_bytes!("../resources/kotus-sanalista_v1.txt");
 
@@ -15,13 +20,22 @@ fn get_words() -> Vec<String> {
     return words;
 }
 
-pub fn get_random_word() -> String {
-    println!("Reading the word list.");
-    let words: Vec<String> = get_words();
-    let word_count = words.len();
-    let mut rng = rand::thread_rng();
-    let random_word = &words[rng.gen_range(0..word_count)];
-    println!("Random word: {}", random_word);
+#[derive(Clone, Copy)]
+pub struct RandomWordGenerator {}
 
-    return random_word.clone();
+impl WordGenerator for RandomWordGenerator  {
+    fn new() -> RandomWordGenerator {
+        RandomWordGenerator {}
+    }
+
+    fn get_random_word(&self) -> String {
+        println!("Reading the word list.");
+        let words: Vec<String> = get_words();
+        let word_count = words.len();
+        let mut rng = rand::thread_rng();
+        let random_word = &words[rng.gen_range(0..word_count)];
+        println!("Random word: {}", random_word);
+
+        return random_word.clone();
+    }
 }
