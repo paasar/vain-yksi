@@ -70,7 +70,7 @@ fn with_games(games: Games) -> impl Filter<Extract=(Games, ), Error=Infallible> 
     warp::any().map(move || games.clone())
 }
 
-fn with_word_generator(word_generator: impl WordGenerator) -> impl Filter<Extract=(dyn WordGenerator, ), Error=Infallible> + Clone {
+fn with_word_generator(word_generator: impl WordGenerator) -> impl Filter<Extract=(impl WordGenerator, ), Error=Infallible> + Clone {
     warp::any().map(move || word_generator.clone())
 }
 

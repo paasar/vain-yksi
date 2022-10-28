@@ -1,7 +1,9 @@
 use std::str;
 use rand::Rng;
 
-pub trait WordGenerator: Clone {
+
+
+pub trait WordGenerator: Clone + Send + 'static {
     fn new() -> Self;
     fn get_random_word(&self) -> String;
 }
