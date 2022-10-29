@@ -12,7 +12,6 @@ use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
 use crate::{Client, Game, Games, GameState};
-use crate::words;
 use crate::words::WordGenerator;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -255,7 +254,8 @@ async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>,
                 break;
             }
         };
-        handle_message(&game_id, &client_id, msg, &games, word_generator.clone()).await;
+        let word_generator = word_generator.clone();
+        handle_message(&game_id, &client_id, msg, &games, word_generator).await;
     };
 
     return;
