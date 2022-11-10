@@ -3,6 +3,8 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
 use warp::{Filter, Rejection, Reply, ws::Message};
 
+use words::{RandomWordGenerator, WordGenerator};
+
 mod handlers;
 mod ws;
 mod words;
@@ -51,10 +53,12 @@ async fn main() {
         .and(warp::fs::dir("./static/"))
         .or(warp::path("assets").and(warp::fs::dir("./static/assets/")));
 
+    let word_generator: RandomWordGenerator = WordGenerator::new();
+
     println!("Configuring websocket routes");
     let routes =
-        new_route(&games)
-            .or(join_route(&games))
+        new_route(&games, word_generator)
+            .or(join_route(&games, word_generator))
             .or(static_files)
             .with(warp::cors().allow_any_origin());
 
@@ -66,7 +70,11 @@ fn with_games(games: Games) -> impl Filter<Extract=(Games, ), Error=Infallible> 
     warp::any().map(move || games.clone())
 }
 
-fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
+fn with_word_generator(word_generator: impl WordGenerator) -> impl Filter<Extract=(impl WordGenerator, ), Error=Infallible> + Clone {
+    warp::any().map(move || word_generator.clone())
+}
+
+fn new_route(games: &Games, word_generator: impl WordGenerator) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/new/<username>
     let new_route = ws_route
@@ -75,12 +83,13 @@ fn new_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> 
         .and(warp::path::end())
         .and(warp::ws())
         .and(with_games(games.clone()))
+        .and(with_word_generator(word_generator))
         .and_then(handlers::new_game_handler);
 
     new_route
 }
 
-fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
+fn join_route(games: &Games, word_generator: impl WordGenerator) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone {
     let ws_route = warp::path("ws");
     // ws/join/<session_id>/<username>
     let join_route = ws_route
@@ -90,6 +99,7 @@ fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection>
         .and(warp::path::end())
         .and(warp::ws())
         .and(with_games(games.clone()))
+        .and(with_word_generator(word_generator))
         .and_then(handlers::join_game_handler);
 
     join_route
@@ -97,15 +107,44 @@ fn join_route(games: &Games) -> impl Filter<Extract=impl Reply, Error=Rejection>
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::time::Duration;
 
     use serde_json::json;
     use tokio::time::timeout;
     use warp::test::WsClient;
+
     use crate::ws::ClientIdAndName;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+
+    #[derive(Clone)]
+    struct TestWordGenerator {
+        words: VecDeque<&'static str>
+    }
+
+    impl WordGenerator for TestWordGenerator {
+        fn new() -> TestWordGenerator {
+            // TestWordGenerator { words: vec!["testisana", "sanatesti"] }
+            let mut d = VecDeque::new();
+            d.push_back("testisana");
+            d.push_back("sanatesti");
+            TestWordGenerator { words: d }
+        }
+
+        fn get_random_word(&mut self) -> String {
+            println!("GET_RANDOM_WORD {}", self.words.len());
+            let new_word = self.words.pop_front();
+            println!("GAA {}", self.words.len());
+            match new_word {
+                None => { panic!("Test word list is empty!") }
+                Some(word) => {
+                    return word.to_string()
+                }
+            }
+        }
+    }
 
     fn new_game_msg() -> String {
         return json!({
@@ -160,8 +199,8 @@ mod tests {
         return Arc::new(Mutex::new(game_container));
     }
 
-    async fn start_game(games: &Games, username: &str) -> WsClient {
-        let route = new_route(games);
+    async fn start_game(games: &Games, username: &str, word_generator: impl WordGenerator + Sync) -> WsClient {
+        let route = new_route(games, word_generator);
 
         return warp::test::ws()
             .path(&*format!("/ws/new/{}", username))
@@ -170,8 +209,8 @@ mod tests {
             .expect("handshake");
     }
 
-    async fn join_game(games: &Games, game_id: &str, username: &str) -> WsClient {
-        let route = join_route(games);
+    async fn join_game(games: &Games, game_id: &str, username: &str, word_generator: impl WordGenerator + Sync) -> WsClient {
+        let route = join_route(games, word_generator);
 
         return warp::test::ws()
             .path(&*format!("/ws/join/{}/{}", game_id, username))
@@ -184,8 +223,9 @@ mod tests {
     #[tokio::test]
     async fn new_game_creator_is_sent_the_game_id() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user%201%C3%A4").await;
+        let mut host_client = start_game(&games, "user%201%C3%A4", word_generator).await;
 
         expect_received(&mut host_client, &*new_game_msg()).await;
         expect_received(&mut host_client, &*your_data_msg("user 1ä")).await;
@@ -195,12 +235,13 @@ mod tests {
     #[tokio::test]
     async fn join_event_is_delivered_to_existing_players() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -212,7 +253,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -238,12 +279,13 @@ mod tests {
     #[tokio::test]
     async fn staring_game_chooses_word_and_notifies_roles() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -255,7 +297,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -305,12 +347,13 @@ mod tests {
     #[tokio::test]
     async fn sent_hints_are_stored_and_after_last_hint_result_are_sent() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -322,7 +365,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -335,7 +378,7 @@ mod tests {
         expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
-        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let mut fourth_client = join_game(&games, "1001", "user4", word_generator).await;
         let user4_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -453,12 +496,13 @@ mod tests {
     #[tokio::test]
     async fn correct_guess_is_given() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -470,7 +514,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -483,7 +527,7 @@ mod tests {
         expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
-        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let mut fourth_client = join_game(&games, "1001", "user4", word_generator).await;
         let user4_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -618,12 +662,13 @@ mod tests {
     #[tokio::test]
     async fn incorrect_guess_is_given() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -635,7 +680,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -648,7 +693,7 @@ mod tests {
         expect_received(&mut third_client, &*other_players_msg(vec!("user1", "user2"))).await;
         expect_received(&mut third_client, &*your_data_msg("user3")).await;
 
-        let mut fourth_client = join_game(&games, "1001", "user4").await;
+        let mut fourth_client = join_game(&games, "1001", "user4", word_generator).await;
         let user4_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -783,12 +828,13 @@ mod tests {
     #[tokio::test]
     async fn requesting_new_round_gives_word_and_notifies_roles() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -800,7 +846,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -883,12 +929,13 @@ mod tests {
     #[tokio::test]
     async fn skip_word_and_retain_roles() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -950,12 +997,13 @@ mod tests {
     #[tokio::test]
     async fn player_quit_is_informed_to_all_others() {
         let games = create_empty_games_state().await;
+        let word_generator: TestWordGenerator = WordGenerator::new();
 
-        let mut host_client = start_game(&games, "user1").await;
+        let mut host_client = start_game(&games, "user1", word_generator).await;
         expect_received(&mut host_client, &*new_game_msg().to_string()).await;
         expect_received(&mut host_client, &*your_data_msg("user1")).await;
 
-        let mut second_client = join_game(&games, "1001", "user2").await;
+        let mut second_client = join_game(&games, "1001", "user2", word_generator).await;
         let user2_joined_msg = json!({
             "event": "join",
             "payload": {
@@ -967,7 +1015,7 @@ mod tests {
         expect_received(&mut second_client, &*other_players_msg(vec!("user1"))).await;
         expect_received(&mut second_client, &*your_data_msg("user2")).await;
 
-        let mut third_client = join_game(&games, "1001", "user3").await;
+        let mut third_client = join_game(&games, "1001", "user3", word_generator).await;
         let user3_joined_msg = json!({
             "event": "join",
             "payload": {

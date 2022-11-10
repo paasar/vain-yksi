@@ -12,7 +12,7 @@ use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
 use crate::{Client, Game, Games, GameState};
-use crate::words;
+use crate::words::WordGenerator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ActionMessage {
@@ -60,7 +60,7 @@ pub(crate) struct ClientIdAndName {
     pub username: String,
 }
 
-pub async fn new_game(username: String, ws: WebSocket, games: Games) {
+pub async fn new_game(username: String, ws: WebSocket, games: Games, word_generator: impl WordGenerator) {
     println!("Creating game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
 
@@ -85,7 +85,7 @@ pub async fn new_game(username: String, ws: WebSocket, games: Games) {
 
     send_message(&new_client, &*user_data_message(&client_id, &username)).await;
 
-    handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id).await;
+    handle_messages(&mut client_ws_rcv, &client_id, &games, &new_game_id, word_generator).await;
 
     remove_client(&games, &new_game_id, &client_id).await;
 }
@@ -111,7 +111,7 @@ fn other_clients_message(clients: &Vec<Client>) -> String {
         }).to_string();
 }
 
-pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: String) {
+pub async fn join_game(username: String, ws: WebSocket, games: Games, word_generator: impl WordGenerator + Sized, game_id: String) {
     println!("Finding game and establishing client connection...");
     let (mut client_ws_rcv, client_sender) = establish_websocket_connection(ws);
 
@@ -122,7 +122,7 @@ pub async fn join_game(username: String, ws: WebSocket, games: Games, game_id: S
 
     send_message(&new_client, &*user_data_message(&client_id, &username)).await;
 
-    handle_messages(&mut client_ws_rcv, &client_id, &games, &game_id).await;
+    handle_messages(&mut client_ws_rcv, &client_id, &games, &game_id, word_generator).await;
 
     remove_client(&games, &game_id, &client_id).await;
 }
@@ -241,7 +241,11 @@ async fn send_message(client: &Client, message: &str) {
     return;
 }
 
-async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: &str, games: &Games, game_id: &str) {
+async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>,
+                         client_id: &str,
+                         games: &Games,
+                         game_id: &str,
+                         word_generator: impl WordGenerator) {
     while let Some(result) = client_ws_rcv.next().await {
         let msg = match result {
             Ok(msg) => msg,
@@ -250,13 +254,14 @@ async fn handle_messages(client_ws_rcv: &mut SplitStream<WebSocket>, client_id: 
                 break;
             }
         };
-        handle_message(&game_id, &client_id, msg, &games).await;
+        let word_generator = word_generator.clone();
+        handle_message(&game_id, &client_id, msg, &games, word_generator).await;
     };
 
     return;
 }
 
-async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games) {
+async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Games, word_generator: impl WordGenerator + Sized) {
     println!("received message from {}: {:?}", client_id, msg);
     let message = match msg.to_str() {
         Ok(v) => v,
@@ -269,8 +274,8 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
             println!("Parsed ActionMessage: {:?}", action_message);
 
             match action_message.action {
-                Action::SkipWordAction(_) => start_next_round(game_id, games, false).await,
-                Action::StartNextRoundAction(_) => start_next_round(game_id, games, true).await,
+                Action::SkipWordAction(_) => start_next_round(game_id, games, word_generator, false).await,
+                Action::StartNextRoundAction(_) => start_next_round(game_id, games, word_generator, true).await,
                 Action::HintAction(hint) => add_hint(client_id, &hint.hint, game_id, games).await,
                 Action::GuessAction(guess) => check_guess(guess.guess, game_id, games).await,
             }
@@ -284,18 +289,19 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
     return;
 }
 
-async fn start_next_round(game_id: &str, games: &Games, roll_roles: bool) {
-    let word = if let Ok(current_games) = games.try_lock() {
-        let word = match &current_games.test_word {
-            Some(w) => w.clone(),
-            None => words::get_random_word(),
-        };
+async fn start_next_round(game_id: &str, games: &Games, mut word_generator: impl WordGenerator, roll_roles: bool) {
+    // let word = if let Ok(current_games) = games.try_lock() {
+        // let word = match &current_games.test_word {
+        //     Some(w) => w.clone(),
+        //     None => word_generator.get_random_word(),
+        // };
+        let word = word_generator.get_random_word();
 
         println!("Word! {}", word.clone());
-        word
-    } else {
-        String::from("Could not get a word.")
-    };
+        // word
+    // } else {
+    //     String::from("Could not get a word.")
+    // };
 
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
