@@ -1,11 +1,9 @@
 use std::str;
 use rand::Rng;
 
-
-
 pub trait WordGenerator: Clone + Send + 'static {
     fn new() -> Self;
-    fn get_random_word(&self) -> String;
+    fn get_random_word(&mut self) -> String;
 }
 
 fn get_words() -> Vec<String> {
@@ -30,7 +28,7 @@ impl WordGenerator for RandomWordGenerator  {
         RandomWordGenerator {}
     }
 
-    fn get_random_word(&self) -> String {
+    fn get_random_word(&mut self) -> String {
         println!("Reading the word list.");
         let words: Vec<String> = get_words();
         let word_count = words.len();

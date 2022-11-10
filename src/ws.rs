@@ -289,18 +289,19 @@ async fn handle_message(game_id: &str, client_id: &str, msg: Message, games: &Ga
     return;
 }
 
-async fn start_next_round(game_id: &str, games: &Games, word_generator: impl WordGenerator, roll_roles: bool) {
-    let word = if let Ok(current_games) = games.try_lock() {
-        let word = match &current_games.test_word {
-            Some(w) => w.clone(),
-            None => word_generator.get_random_word(),
-        };
+async fn start_next_round(game_id: &str, games: &Games, mut word_generator: impl WordGenerator, roll_roles: bool) {
+    // let word = if let Ok(current_games) = games.try_lock() {
+        // let word = match &current_games.test_word {
+        //     Some(w) => w.clone(),
+        //     None => word_generator.get_random_word(),
+        // };
+        let word = word_generator.get_random_word();
 
         println!("Word! {}", word.clone());
-        word
-    } else {
-        String::from("Could not get a word.")
-    };
+        // word
+    // } else {
+    //     String::from("Could not get a word.")
+    // };
 
     if let Ok(mut editable_games) = games.try_lock() {
         match editable_games.live_games.get_mut(game_id) {
